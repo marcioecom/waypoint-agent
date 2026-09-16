@@ -14,3 +14,8 @@ dependencies = [
 
 [tool.fastapi]
 entrypoint = "main:app"
+
+[dependency-groups]
+dev = [
+    "streamlit (>=1.60.0,<2.0.0)"
+]

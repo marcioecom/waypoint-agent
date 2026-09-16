@@ -1,5 +1,8 @@
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from agent import build_agent
+from routers import message_routers_v1
 
 load_dotenv()
 
@@ -9,7 +12,16 @@ Experimentos disponíveis:
 ✈️ Planejador de voos
 🧪 Novos protótipos"""
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.agent = await build_agent()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+app.include_router(message_routers_v1.router, prefix="/v1")
 
 
 @app.get("/")
