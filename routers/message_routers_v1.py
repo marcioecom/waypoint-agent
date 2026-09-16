@@ -24,4 +24,4 @@ async def invoke_agent(payload: ChatRequest, agent=Depends(get_agent)):
         config,
     )
 
-    return {"messages": response["messages"][-1]}
+    return {"messages": response["messages"][-1].content}
