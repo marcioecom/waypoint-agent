@@ -8,7 +8,6 @@ async def build_agent():
         {
             "travel_server": {
                 "transport": "streamable_http",
-                # "transport": "sse",
                 "url": "https://mcp.kiwi.com",
                 "timeout": 30_000,
             }
