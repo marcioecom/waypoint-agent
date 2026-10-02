@@ -1,7 +1,13 @@
+import logging
+
 from fastapi import APIRouter, Depends, Request
-from langchain_core.messages import HumanMessage
-from langchain_core.runnables import RunnableConfig
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+from chat import run_agent, schedule_reply
+from settings import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 
@@ -17,11 +23,11 @@ class ChatRequest(BaseModel):
 
 @router.post("")
 async def invoke_agent(payload: ChatRequest, agent=Depends(get_agent)):
-    config: RunnableConfig = {"configurable": {"thread_id": payload.thread_id}}
+    logger.info("inbound %s: %s", payload.thread_id, payload.message[:80])
 
-    response = await agent.ainvoke(
-        {"messages": [HumanMessage(content=payload.message)]},
-        config,
-    )
+    # O gateway não fica esperando o modelo. A resposta volta por POST /messages.
+    if settings.gateway_url:
+        schedule_reply(agent, payload.thread_id, payload.message)
+        return JSONResponse({"ok": True}, status_code=202)
 
-    return {"messages": response["messages"][-1].content}
+    return {"messages": await run_agent(agent, payload.thread_id, payload.message)}
