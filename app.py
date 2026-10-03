@@ -1,63 +1,81 @@
 import asyncio
-import uuid
+import atexit
+import secrets
+from contextlib import AsyncExitStack
+from threading import Thread
 
-from langchain_core.runnables import RunnableConfig
 import streamlit as st
 from dotenv import load_dotenv
-from langchain.messages import HumanMessage
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from agent import build_agent
+from chat import run_agent, shutdown_runtime
+from settings import settings
 
 load_dotenv()
 
-st.set_page_config(page_title="Travel Assistant", page_icon="✈️")
+st.set_page_config(page_title="Dhay — voos", page_icon="✈️")
 
 
 @st.cache_resource
-async def get_agent():
-    agent = await build_agent()
-    return agent
+def _runtime():
+    # All cached async clients/checkpoints stay on one live loop across reruns.
+    loop = asyncio.new_event_loop()
+    thread = Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+    stack = AsyncExitStack()
+
+    async def bootstrap():
+        checkpointer = await stack.enter_async_context(
+            AsyncSqliteSaver.from_conn_string(settings.sqlite_conn_string())
+        )
+        return await build_agent(checkpointer)
+
+    async def close():
+        await shutdown_runtime()
+        await stack.aclose()
+
+    def cleanup():
+        try:
+            asyncio.run_coroutine_threadsafe(close(), loop).result(timeout=10)
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join(timeout=10)
+            if not thread.is_alive():
+                loop.close()
+
+    try:
+        agent = asyncio.run_coroutine_threadsafe(bootstrap(), loop).result(timeout=60)
+    except Exception:
+        cleanup()
+        raise
+    atexit.register(cleanup)
+    return agent, loop
 
 
-async def main() -> None:
-    st.title("✈️ Travel Assistant")
-    st.caption("Pergunte sobre reservas, politicas do hotel ou destinos.")
+st.title("✈️ Dhay")
+st.caption("Busca de voos via Kiwi. Só pergunte sobre passagens aéreas.")
 
-    agent = await get_agent()
-    st.session_state.setdefault("messages", [])
-    st.session_state.setdefault("chat_log", [])
-    st.session_state.setdefault("thread_id", str(uuid.uuid4()))
+agent, loop = _runtime()
 
-    for message in st.session_state.chat_log:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
+if "thread_id" not in st.session_state:
+    st.session_state.thread_id = f"streamlit-{secrets.token_hex(16)}"
+if "chat_log" not in st.session_state:
+    st.session_state.chat_log = []
 
-    if prompt := st.chat_input("Digite sua pergunta"):
-        st.session_state.chat_log.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.write(prompt)
+for message in st.session_state.chat_log:
+    with st.chat_message(message["role"]):
+        st.text(message["content"])
 
-        with st.chat_message("assistant"):
-            with st.spinner("Consultando o agente..."):
-                config: RunnableConfig = {
-                    "configurable": {"thread_id": st.session_state.thread_id}
-                }
+if prompt := st.chat_input("Origem, destino, datas..."):
+    st.session_state.chat_log.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.text(prompt)
 
-                result = await agent.ainvoke(
-                    {
-                        "messages": [
-                            *st.session_state.messages,
-                            HumanMessage(content=prompt),
-                        ]
-                    },
-                    config,
-                )
-
-            st.session_state.messages = result["messages"]
-            answer = result["messages"][-1].content
-            st.write(answer)
-            st.session_state.chat_log.append({"role": "assistant", "content": answer})
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    with st.chat_message("assistant"):
+        with st.spinner("Consultando voos..."):
+            answer = asyncio.run_coroutine_threadsafe(
+                run_agent(agent, st.session_state.thread_id, prompt), loop
+            ).result(timeout=settings.agent_timeout_seconds + 5)
+        st.text(answer)
+        st.session_state.chat_log.append({"role": "assistant", "content": answer})

@@ -13,6 +13,13 @@ class GatewayAuthMiddleware:
         if scope["type"] != "http" or not scope["path"].startswith("/v1/messages"):
             await self.app(scope, receive, send)
             return
+        if not settings.gateway_token:
+            response = JSONResponse(
+                {"detail": "endpoint unavailable"},
+                status_code=503,
+            )
+            await response(scope, receive, send)
+            return
         if not _authorized(scope):
             response = JSONResponse({"detail": "unauthorized"}, status_code=401)
             await response(scope, receive, send)
@@ -32,8 +39,6 @@ def _bearer(scope) -> str:
 
 def _authorized(scope) -> bool:
     expected = settings.gateway_token
-    if not expected:
-        return True
     received = _bearer(scope)
     if len(received) != len(expected):
         return False

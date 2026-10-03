@@ -11,3 +11,6 @@ wheels/
 
 # envs
 .env
+
+# persisted checkpoints
+data/
