@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     gateway_url: str = ""
     gateway_token: str = ""
+    timezone: str = "America/Sao_Paulo"
 
 
 settings = Settings()
