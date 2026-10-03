@@ -101,7 +101,7 @@ async def build_agent():
         "gpt-5-nano",
         tools=tools,
         checkpointer=InMemorySaver(),
-        system_prompt="You are a travel agent. No follow up questions.",
+        system_prompt=SYSTEM_PROMPT,
     )
 
     return agent
