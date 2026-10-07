@@ -29,12 +29,22 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
         departure_date_to: str | None = None,
         return_date: str | None = None,
         return_date_to: str | None = None,
+        nights_in_dst_from: int | None = None,
+        nights_in_dst_to: int | None = None,
         adults: int = 1,
         cabin_class: Literal["M", "W", "C", "F"] = "M",
         currency: str = "BRL",
         sort: Literal["price", "duration", "quality", "date"] = "price",
     ) -> str:
-        """Busca voos na Kiwi. Datas em dd/mm/yyyy. Use faixas com *_to para mês inteiro."""
+        """Busca voos na Kiwi. Datas em dd/mm/yyyy.
+
+        Preferências de uso:
+        - Mês + estadia de N dias (ex.: “1 semana em janeiro, a mais barata”):
+          departure_date/departure_date_to cobrindo o mês + nights_in_dst_from/to=N.
+          Não peça semana específica e NÃO use return_date nesses casos.
+        - Ida e volta com datas de volta explícitas: return_date / return_date_to.
+        - Aceite nomes de cidade; não invente IATA.
+        """
         thread_id = current_thread_id.get()
         if thread_id:
             try:
@@ -42,7 +52,11 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
                     thread_id,
                     origin=fly_from,
                     destination=fly_to,
-                    trip_type="round_trip" if return_date else "one_way",
+                    trip_type=(
+                        "round_trip"
+                        if return_date or nights_in_dst_from is not None
+                        else "one_way"
+                    ),
                     date_from=departure_date,
                     date_to=departure_date_to or departure_date,
                     return_from=return_date,
@@ -62,6 +76,8 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
             departure_date_to=departure_date_to,
             return_date=return_date,
             return_date_to=return_date_to,
+            nights_in_dst_from=nights_in_dst_from,
+            nights_in_dst_to=nights_in_dst_to,
             adults=adults,
             cabin_class=cabin_class,
             currency=currency,

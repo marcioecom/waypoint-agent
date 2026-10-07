@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from datetime import datetime
 from typing import Any
@@ -9,11 +10,51 @@ from typing import Any
 
 def _parse_json(payload: Any) -> Any:
     if isinstance(payload, str):
+        text = payload.strip()
         try:
-            return json.loads(payload)
+            return json.loads(text)
         except json.JSONDecodeError:
-            return {"raw": payload}
+            # MCP adapters às vezes serializam content blocks com aspas simples.
+            try:
+                return ast.literal_eval(text)
+            except (SyntaxError, ValueError):
+                return {"raw": payload}
     return payload
+
+
+def _unwrap_mcp_payload(payload: Any) -> Any:
+    """Extrai o JSON útil de content blocks do MCP/LangChain.
+
+    Formatos comuns:
+    - dict já pronto
+    - list[{type: text, text: "{...json...}"}]
+    - str JSON / repr de list
+    """
+    data = _parse_json(payload)
+
+    if isinstance(data, list):
+        texts: list[str] = []
+        for block in data:
+            if isinstance(block, str):
+                texts.append(block)
+            elif isinstance(block, dict):
+                text = block.get("text")
+                if isinstance(text, str) and text.strip():
+                    texts.append(text)
+        for text in texts:
+            parsed = _parse_json(text)
+            if isinstance(parsed, dict) and (
+                "itineraries" in parsed or "resultsCount" in parsed or "query" in parsed
+            ):
+                return parsed
+        if texts:
+            return _parse_json(texts[0])
+        return data
+
+    if isinstance(data, dict) and isinstance(data.get("content"), list):
+        return _unwrap_mcp_payload(data["content"])
+
+    return data
 
 
 def _fmt_local(value: str | None) -> str:
@@ -83,9 +124,9 @@ def offer_from_itinerary(itinerary: dict[str, Any]) -> dict[str, str]:
 
 
 def compress_search_payload(payload: Any, *, limit: int = 5) -> dict[str, Any]:
-    data = _parse_json(payload)
+    data = _unwrap_mcp_payload(payload)
     if not isinstance(data, dict):
-        return {"resultsCount": 0, "offers": [], "raw": str(data)[:500]}
+        return {"resultsCount": 0, "offers": [], "raw": str(payload)[:500]}
 
     itineraries = data.get("itineraries")
     if not isinstance(itineraries, list):
@@ -98,17 +139,21 @@ def compress_search_payload(payload: Any, *, limit: int = 5) -> dict[str, Any]:
             if offer["booking_url"] or offer["price"]:
                 offers.append(offer)
 
+    results_count = data.get("resultsCount", len(itineraries))
+    if offers and (not results_count or results_count == 0):
+        results_count = len(offers)
+
     return {
         "query": data.get("query"),
         "currency": data.get("currency"),
         "passengers": data.get("passengers"),
-        "resultsCount": data.get("resultsCount", len(itineraries)),
+        "resultsCount": results_count,
         "offers": offers,
         "note": (
             "Copie price/route/details/booking_url das offers para AgentReply. "
             "Não invente dados."
             if offers
-            else "Sem itinerários. Proponha um ajuste e peça autorização para nova busca."
+            else "Sem itinerários. Ajuste a busca e tente de novo sem perguntar menu."
         ),
     }
 
@@ -121,12 +166,24 @@ def mcp_search_args(
     departure_date_to: str | None = None,
     return_date: str | None = None,
     return_date_to: str | None = None,
+    nights_in_dst_from: int | None = None,
+    nights_in_dst_to: int | None = None,
     adults: int = 1,
     cabin_class: str = "M",
     currency: str = "BRL",
     sort: str = "price",
 ) -> dict[str, Any]:
     """Preenche o schema estrito do MCP Kiwi com defaults seguros."""
+    # Estadia fixa (ex.: 7 noites) é o padrão certo para "ida + N dias".
+    # Nessas buscas, returnDate vira redundante e costuma piorar o match.
+    if nights_in_dst_from is not None or nights_in_dst_to is not None:
+        return_date = None
+        return_date_to = None
+        if nights_in_dst_from is None:
+            nights_in_dst_from = nights_in_dst_to
+        if nights_in_dst_to is None:
+            nights_in_dst_to = nights_in_dst_from
+
     return {
         "flyFrom": fly_from,
         "flyTo": fly_to,
@@ -142,8 +199,8 @@ def mcp_search_args(
         "cabinClass": cabin_class,
         "currency": currency,
         "locale": "pt",
-        "nights_in_dst_from": None,
-        "nights_in_dst_to": None,
+        "nights_in_dst_from": nights_in_dst_from,
+        "nights_in_dst_to": nights_in_dst_to,
         "one_for_city": False,
         "max_sector_stopovers": None,
         "price_from": None,
