@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from chat import run_agent, schedule_reply
-from settings import settings
+from travel_agent.services.chat import run_agent, schedule_reply
+from travel_agent.settings import settings
 
 logger = logging.getLogger(__name__)
 

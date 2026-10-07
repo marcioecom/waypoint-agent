@@ -1,4 +1,4 @@
-from chat import as_text
+from travel_agent.services.chat import as_text
 
 
 def test_as_text_joins_blocks():

@@ -4,10 +4,10 @@ import uuid
 import streamlit as st
 from dotenv import load_dotenv
 
-from agent import build_agent
-from chat import run_agent
-from memory import AgentMemory
-from settings import settings
+from travel_agent.agent import build_agent
+from travel_agent.agent.memory import AgentMemory
+from travel_agent.services.chat import run_agent
+from travel_agent.settings import settings
 
 load_dotenv()
 

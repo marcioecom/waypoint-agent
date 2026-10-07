@@ -23,21 +23,33 @@ Testes:
 uv run pytest
 ```
 
-`main.py` sobe o FastAPI. O resto fica em funções de módulo, no mesmo papel dos arquivos em `src/` do gateway:
+## Estrutura
 
-| Arquivo | O que faz |
-| --- | --- |
-| `settings.py` | Lê as envs. Ponto único de configuração. |
-| `routers/message_routers_v1.py` | Contrato HTTP de `POST /v1/messages`. |
-| `chat.py` | Roda o agent e agenda a resposta. |
-| `gateway.py` | Manda `{ jid, text }` de volta para o gateway. |
-| `middlewares/auth.py` | Exige o token só em `/v1/messages`. |
-| `agent.py` | Monta o modelo, o prompt dinâmico e as tools. |
-| `flights.py` | Normaliza/comprime resultados da Kiwi. |
-| `memory.py` | Checkpointer SQLite, preferências e pedido ativo. |
-| `reply.py` | Schema da resposta e render das ofertas no WhatsApp. |
+Organização no estilo LangGraph + módulos claros (mental model de Node):
 
-`app.py` é a UI local em Streamlit. Não entra no fluxo do WhatsApp.
+```text
+main.py / app.py          # entrypoints (FastAPI / Streamlit)
+travel_agent/
+  settings.py             # configuração (envs)
+  api/                    # HTTP (rotas + auth)
+  services/               # orquestração (chat, gateway client)
+  agent/                  # domínio do agent
+    builder.py            # create_agent / wiring
+    prompt.py             # system prompt
+    reply.py              # schema + render WhatsApp
+    flights.py            # compressão Kiwi
+    memory.py             # checkpointer, prefs, trip brief
+    tools/                # tools do modelo
+    middleware/           # trim, guards
+tests/
+```
+
+| Pasta / arquivo | Analogia Node | O que faz |
+| --- | --- | --- |
+| `travel_agent/api/` | `routes/` + middleware HTTP | Contrato FastAPI |
+| `travel_agent/services/` | `services/` | Roda o agent e fala com o gateway |
+| `travel_agent/agent/` | domínio do bot | Prompt, tools, memória, builder |
+| `travel_agent/settings.py` | `config/` | Envs |
 
 | Variável | Exemplo |
 | --- | --- |

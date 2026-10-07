@@ -2,7 +2,7 @@ import secrets
 
 from fastapi.responses import JSONResponse
 
-from settings import settings
+from travel_agent.settings import settings
 
 
 class GatewayAuthMiddleware:

@@ -4,9 +4,9 @@ import logging
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 
-from gateway import send_message
-from memory import current_thread_id
-from reply import text_from_response
+from travel_agent.agent.memory import current_thread_id
+from travel_agent.agent.reply import text_from_response
+from travel_agent.services.gateway import send_message
 
 logger = logging.getLogger(__name__)
 

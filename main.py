@@ -4,11 +4,11 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-from agent import build_agent
-from memory import open_memory
-from middlewares.auth import GatewayAuthMiddleware
-from routers import message_routers_v1
-from settings import settings
+from travel_agent.agent import build_agent
+from travel_agent.agent.memory import open_memory
+from travel_agent.api.auth import GatewayAuthMiddleware
+from travel_agent.api.messages import router as messages_router
+from travel_agent.settings import settings
 
 load_dotenv()
 
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(GatewayAuthMiddleware)
-app.include_router(message_routers_v1.router, prefix="/v1")
+app.include_router(messages_router, prefix="/v1")
 
 
 @app.get("/")

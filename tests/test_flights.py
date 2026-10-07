@@ -1,4 +1,8 @@
-from flights import compress_search_payload, mcp_search_args, offer_from_itinerary
+from travel_agent.agent.flights import (
+    compress_search_payload,
+    mcp_search_args,
+    offer_from_itinerary,
+)
 
 
 def test_offer_from_itinerary_formats_route_and_details():

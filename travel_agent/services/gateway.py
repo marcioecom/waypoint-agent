@@ -2,7 +2,7 @@ import asyncio
 
 import httpx
 
-from settings import settings
+from travel_agent.settings import settings
 
 
 async def send_message(jid: str, text: str) -> None:

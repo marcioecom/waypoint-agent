@@ -3,15 +3,19 @@ import asyncio
 from langchain.agents.middleware.types import ModelResponse
 from langchain_core.messages import AIMessage, ToolMessage
 
-from agent import _looks_like_cold_start, _offers_from_recent_tools, guard_post_search
-from reply import AgentReply
+from travel_agent.agent.middleware import (
+    guard_post_search,
+    looks_like_cold_start,
+    offers_from_recent_tools,
+)
+from travel_agent.agent.reply import AgentReply
 
 
 def test_looks_like_cold_start_detects_reintro():
-    assert _looks_like_cold_start(
+    assert looks_like_cold_start(
         "Oi! Sou o Dhay, seu assistente de voos. Para começar, me passe: origem..."
     )
-    assert not _looks_like_cold_start("Encontrei 3 opções de Palmas para São Paulo.")
+    assert not looks_like_cold_start("Encontrei 3 opções de Palmas para São Paulo.")
 
 
 def test_offers_from_recent_tools_reads_search_payload():
@@ -26,7 +30,7 @@ def test_offers_from_recent_tools_reads_search_payload():
             name="search_flights",
         ),
     ]
-    offers = _offers_from_recent_tools(messages)
+    offers = offers_from_recent_tools(messages)
     assert len(offers) == 1
     assert offers[0].price == "R$ 900"
 

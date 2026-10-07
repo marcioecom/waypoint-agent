@@ -1,4 +1,9 @@
-from reply import AgentReply, FlightOffer, render_reply, text_from_response
+from travel_agent.agent.reply import (
+    AgentReply,
+    FlightOffer,
+    render_reply,
+    text_from_response,
+)
 
 
 def test_render_includes_offer_fields_not_just_ids():
