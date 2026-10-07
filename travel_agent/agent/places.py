@@ -2,8 +2,9 @@
 
 Cidades com homônimos perigosos (Santiago, Córdoba…) ganham o default
 óbvio para quem viaja do Brasil, a menos que o usuário já tenha dado
-país ou IATA. Também serve para checar se as ofertas chegaram no lugar
-pedido.
+país ou IATA. Destinos em que o nome de cidade zera a Kiwi (Bali) vão
+direto para o IATA. Também serve para checar se as ofertas chegaram no
+lugar pedido.
 """
 
 from __future__ import annotations
@@ -56,7 +57,7 @@ class Place:
         return None
 
 
-# Poucos homônimos que a Kiwi costuma resolver errado para um usuário BR.
+# Homônimos e destinos em que o nome de cidade zera a Kiwi (ex.: Bali).
 PLACES: tuple[Place, ...] = (
     Place(
         names=("santiago",),
@@ -97,6 +98,12 @@ PLACES: tuple[Place, ...] = (
             ),
             (("costa rica", "sjo"), "San José, Costa Rica", frozenset({"SJO"})),
         ),
+    ),
+    # "Denpasar, Indonesia" / "Bali" devolvem 0 na Kiwi; DPS encontra itinerários.
+    Place(
+        names=("bali", "denpasar"),
+        default="DPS",
+        default_iata=frozenset({"DPS"}),
     ),
 )
 

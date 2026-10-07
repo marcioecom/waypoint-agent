@@ -39,6 +39,16 @@ def test_unambiguous_city_is_unchanged():
     assert expected_arrival_iata("São Paulo") is None
 
 
+def test_bali_resolves_to_dps_for_kiwi():
+    assert resolve_place("Bali") == "DPS"
+    assert resolve_place("bali indonesia") == "DPS"
+    assert resolve_place("Denpasar, Indonesia") == "DPS"
+    assert resolve_place("Denpasar") == "DPS"
+    assert expected_arrival_iata("Bali") == frozenset({"DPS"})
+    assert expected_arrival_iata("Denpasar, Indonesia") == frozenset({"DPS"})
+    assert expected_arrival_iata("DPS") == frozenset({"DPS"})
+
+
 def test_arrival_iata_reads_last_outbound_airport():
     route = (
         "PMW → CNF → GRU → CMN → RAI · 14/08 10:00 → 15/08 08:00"

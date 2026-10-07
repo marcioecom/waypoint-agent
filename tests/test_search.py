@@ -113,3 +113,15 @@ def test_explicit_cape_verde_is_not_rewritten_to_chile(tmp_path):
     assert payload["offers"]
     assert "RAI" in payload["offers"][0]["route"]
     assert memory.trips.get("wa-1")["destination"] == "RAI"
+
+
+def test_bali_search_uses_dps_not_city_name(tmp_path):
+    memory = AgentMemory.create(tmp_path / "agent.sqlite")
+    kiwi = FakeKiwi(always="DPS")
+    payload = _search(memory, kiwi, "Bali")
+
+    assert kiwi.calls[0]["flyTo"] == "DPS"
+    assert payload["destination"] == "DPS"
+    assert payload["offers"]
+    assert "DPS" in payload["offers"][0]["route"]
+    assert memory.trips.get("wa-1")["destination"] == "DPS"

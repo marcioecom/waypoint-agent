@@ -220,6 +220,8 @@ class TripBrief:
                         current = loaded
                 except json.JSONDecodeError:
                     current = {}
+
+            cleaned: dict[str, Any] = {}
             for key, value in fields.items():
                 if key not in _TRIP_KEYS or value is None:
                     continue
@@ -227,7 +229,26 @@ class TripBrief:
                     value = value.strip()
                     if not value:
                         continue
-                current[key] = value
+                cleaned[key] = value
+
+            # Pedido novo (outra origem/destino) não herda datas/notas antigas.
+            route_changed = False
+            for key in ("origin", "destination"):
+                if key in cleaned and current.get(key) not in (None, "", cleaned[key]):
+                    route_changed = True
+                    break
+            if route_changed:
+                for key in (
+                    "date_from",
+                    "date_to",
+                    "return_from",
+                    "return_to",
+                    "notes",
+                ):
+                    if key not in cleaned:
+                        current.pop(key, None)
+
+            current.update(cleaned)
             if "status" not in current:
                 current["status"] = "collecting"
             payload = json.dumps(current, ensure_ascii=False)

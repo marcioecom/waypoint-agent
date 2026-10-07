@@ -58,6 +58,31 @@ def test_trip_brief_roundtrip_and_prompt(tmp_path):
     assert trips.prompt_block("other").startswith("Nenhum pedido ativo")
 
 
+def test_trip_brief_clears_stale_dates_when_route_changes(tmp_path):
+    trips = TripBrief(tmp_path / "agent.sqlite")
+    trips.update(
+        "chat-1",
+        origin="São Paulo",
+        destination="DPS",
+        date_from="01/01/2028",
+        date_to="31/01/2028",
+        notes="sem resultados; ampliar Nov–Mar",
+        status="searched",
+    )
+    trips.update(
+        "chat-1",
+        origin="Palmas",
+        destination="DPS",
+        status="collecting",
+    )
+    saved = trips.get("chat-1")
+    assert saved["origin"] == "Palmas"
+    assert saved["destination"] == "DPS"
+    assert "date_from" not in saved
+    assert "date_to" not in saved
+    assert "notes" not in saved
+
+
 def test_system_prompt_includes_today_trip_and_preferences(tmp_path):
     prefs = Preferences(tmp_path / "agent.sqlite")
     trips = TripBrief(tmp_path / "agent.sqlite")
@@ -80,6 +105,8 @@ def test_system_prompt_includes_today_trip_and_preferences(tmp_path):
     assert "Santiago, Chile" in SYSTEM_PROMPT
     assert "rotule um destino diferente" in SYSTEM_PROMPT
     assert "*negrito*" in SYSTEM_PROMPT
+    assert "novembro deste ano" in SYSTEM_PROMPT
+    assert "Bali → DPS" in SYSTEM_PROMPT
 
 
 def test_save_user_preferences_tool_uses_thread_context(tmp_path):
