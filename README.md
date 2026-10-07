@@ -9,7 +9,11 @@ Agent de viagens. Recebe o texto de uma conversa, consulta o Kiwi e devolve a re
 
 Os dois serviços usam o mesmo `GATEWAY_TOKEN` no header `Authorization: Bearer ...`. Sem esse token, `/v1/messages` fica aberto.
 
-A memória da conversa, as preferências e o **pedido ativo** (`TripBrief`) ficam em SQLite (`SQLITE_PATH`, padrão `data/agent.sqlite`), por `thread_id`. A busca passa por um wrapper fino da Kiwi (top ofertas já normalizadas). O texto do WhatsApp é montado a partir da resposta estruturada (mensagem + ofertas com preço, rota e link).
+A memória da conversa fica em SQLite por `thread_id`:
+- checkpointer LangGraph: `SQLITE_PATH` (padrão `data/agent.sqlite`)
+- preferências + pedido ativo (`TripBrief`): arquivo irmão `*-state.sqlite`
+
+A busca passa por um wrapper fino da Kiwi (top ofertas já normalizadas). O texto do WhatsApp é montado a partir da resposta estruturada (mensagem + ofertas com preço, rota e link).
 
 ```bash
 uv sync

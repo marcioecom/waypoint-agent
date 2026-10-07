@@ -9,6 +9,7 @@ from travel_agent.agent.memory import (
     TripBrief,
     current_thread_id,
     open_memory,
+    state_db_path,
 )
 from travel_agent.agent.tools import preference_tool, trip_tool
 
@@ -114,9 +115,43 @@ def test_open_memory_uses_sqlite_checkpointer(tmp_path):
     async def _run():
         async with open_memory(tmp_path / "agent.sqlite") as memory:
             assert memory.checkpointer is not None
+            assert memory.state_path == state_db_path(tmp_path / "agent.sqlite")
+            assert memory.path != memory.state_path
             memory.prefs.update("jid@s.whatsapp.net", home_city="BH")
             assert memory.prefs.get("jid@s.whatsapp.net")["home_city"] == "BH"
             memory.trips.update("jid@s.whatsapp.net", origin="BH", destination="SP")
             assert memory.trips.get("jid@s.whatsapp.net")["origin"] == "BH"
 
     asyncio.run(_run())
+
+
+def test_state_and_checkpointer_use_separate_files(tmp_path):
+    checkpoint = tmp_path / "agent.sqlite"
+    memory = AgentMemory.create(checkpoint)
+    assert memory.path == checkpoint
+    assert memory.state_path == tmp_path / "agent-state.sqlite"
+    assert memory.prefs.path == memory.state_path
+    assert memory.trips.path == memory.state_path
+
+
+def test_concurrent_trip_updates_do_not_raise(tmp_path):
+    memory = AgentMemory.create(tmp_path / "agent.sqlite")
+
+    def _write(i: int) -> None:
+        memory.trips.update(
+            "chat-race",
+            origin="Palmas",
+            destination="São Paulo",
+            notes=f"n{i}",
+            status="searched",
+        )
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(_write, range(20)))
+
+    saved = memory.trips.get("chat-race")
+    assert saved["origin"] == "Palmas"
+    assert saved["status"] == "searched"
+    assert saved["notes"].startswith("n")
