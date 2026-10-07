@@ -5,6 +5,7 @@ from typing import Literal
 from langchain.tools import tool
 
 from travel_agent.agent.memory import AgentMemory, current_thread_id
+from travel_agent.agent.places import resolve_place
 
 
 def trip_tool(memory: AgentMemory):
@@ -27,6 +28,10 @@ def trip_tool(memory: AgentMemory):
         thread_id = current_thread_id.get()
         if not thread_id:
             return "Não consegui associar o pedido a este chat."
+        if origin:
+            origin = resolve_place(origin)
+        if destination:
+            destination = resolve_place(destination)
         saved = memory.trips.update(
             thread_id,
             origin=origin,

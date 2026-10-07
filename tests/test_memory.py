@@ -76,6 +76,8 @@ def test_system_prompt_includes_today_trip_and_preferences(tmp_path):
     assert "update_trip_brief" in SYSTEM_PROMPT
     assert "save_user_preferences" in SYSTEM_PROMPT
     assert "questionário" in SYSTEM_PROMPT.lower()
+    assert "Santiago, Chile" in SYSTEM_PROMPT
+    assert "rotule um destino diferente" in SYSTEM_PROMPT
 
 
 def test_save_user_preferences_tool_uses_thread_context(tmp_path):
@@ -109,6 +111,18 @@ def test_update_trip_brief_tool_uses_thread_context(tmp_path):
         current_thread_id.reset(token)
     assert "Palmas" in result
     assert memory.trips.get("wa-2")["destination"] == "São Paulo"
+
+
+def test_update_trip_brief_keeps_santiago_disambiguated(tmp_path):
+    memory = AgentMemory.create(tmp_path / "agent.sqlite")
+    tool = trip_tool(memory)
+    token = current_thread_id.set("wa-scl")
+    try:
+        result = tool.invoke({"destination": "Santiago", "status": "collecting"})
+    finally:
+        current_thread_id.reset(token)
+    assert "Santiago, Chile" in result
+    assert memory.trips.get("wa-scl")["destination"] == "Santiago, Chile"
 
 
 def test_open_memory_uses_sqlite_checkpointer(tmp_path):

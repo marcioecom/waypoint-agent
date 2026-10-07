@@ -8,6 +8,12 @@ from langchain.tools import BaseTool, tool
 
 from travel_agent.agent.flights import compress_search_payload, mcp_search_args
 from travel_agent.agent.memory import AgentMemory, current_thread_id
+from travel_agent.agent.places import (
+    arrival_airports,
+    expected_arrival_iata,
+    offers_for_destination,
+    resolve_place,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +49,11 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
           departure_date/departure_date_to cobrindo o mês + nights_in_dst_from/to=N.
           Não peça semana específica e NÃO use return_date nesses casos.
         - Ida e volta com datas de volta explícitas: return_date / return_date_to.
-        - Aceite nomes de cidade; não invente IATA.
+        - Passe cidade com país (ou IATA se já souber): “Santiago, Chile”.
+          Não invente IATA e não peça IATA ao usuário.
         """
+        fly_from = resolve_place(fly_from)
+        fly_to = resolve_place(fly_to)
         thread_id = current_thread_id.get()
         if thread_id:
             try:
@@ -83,8 +92,54 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
             currency=currency,
             sort=sort,
         )
-        raw = await kiwi_search.ainvoke(args)
-        compressed = compress_search_payload(raw, limit=5)
+        compressed = await _run_search(kiwi_search, args)
+        expected = expected_arrival_iata(fly_to)
+        offers = list(compressed.get("offers") or [])
+        matched = offers_for_destination(offers, fly_to)
+
+        if expected and not matched:
+            iata = next(iter(expected))
+            if iata.upper() != fly_to.strip().upper():
+                retry_args = dict(args)
+                retry_args["flyTo"] = iata
+                compressed = await _run_search(kiwi_search, retry_args)
+                offers = list(compressed.get("offers") or [])
+                matched = offers_for_destination(offers, iata)
+
+        if expected and not matched:
+            got = ", ".join(arrival_airports(offers)) or "destino inesperado"
+            wanted = ", ".join(sorted(expected))
+            logger.warning(
+                "flight destination mismatch: wanted %s (%s), got %s",
+                fly_to,
+                wanted,
+                got,
+            )
+            return json.dumps(
+                {
+                    "query": compressed.get("query"),
+                    "destination": fly_to,
+                    "resultsCount": 0,
+                    "offers": [],
+                    "arrivalAirports": arrival_airports(offers),
+                    "note": (
+                        f"A busca não chegou em {fly_to} ({wanted}); "
+                        f"os voos foram para {got}. "
+                        "Não apresente essas rotas como se fossem o destino pedido. "
+                        "Avise com honestidade."
+                    ),
+                },
+                ensure_ascii=False,
+            )
+
+        compressed["offers"] = matched or offers
+        compressed["destination"] = fly_to
+        compressed["arrivalAirports"] = arrival_airports(compressed["offers"])
         return json.dumps(compressed, ensure_ascii=False)
 
     return search_flights
+
+
+async def _run_search(kiwi_search: BaseTool, args: dict) -> dict:
+    raw = await kiwi_search.ainvoke(args)
+    return compress_search_payload(raw, limit=5)
