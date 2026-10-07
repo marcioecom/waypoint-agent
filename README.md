@@ -9,7 +9,7 @@ Agent de viagens. Recebe o texto de uma conversa, consulta o Kiwi e devolve a re
 
 Os dois serviços usam o mesmo `GATEWAY_TOKEN` no header `Authorization: Bearer ...`. Sem esse token, `/v1/messages` fica aberto.
 
-A memória da conversa e as preferências do usuário ficam em SQLite (`SQLITE_PATH`, padrão `data/agent.sqlite`), por `thread_id`. O texto enviado ao WhatsApp é montado a partir da resposta estruturada (mensagem + ofertas com preço, rota e link), não só de ids.
+A memória da conversa, as preferências e o **pedido ativo** (`TripBrief`) ficam em SQLite (`SQLITE_PATH`, padrão `data/agent.sqlite`), por `thread_id`. A busca passa por um wrapper fino da Kiwi (top ofertas já normalizadas). O texto do WhatsApp é montado a partir da resposta estruturada (mensagem + ofertas com preço, rota e link).
 
 ```bash
 uv sync
@@ -33,14 +33,18 @@ uv run pytest
 | `gateway.py` | Manda `{ jid, text }` de volta para o gateway. |
 | `middlewares/auth.py` | Exige o token só em `/v1/messages`. |
 | `agent.py` | Monta o modelo, o prompt dinâmico e as tools. |
-| `memory.py` | Checkpointer SQLite e preferências por chat. |
+| `flights.py` | Normaliza/comprime resultados da Kiwi. |
+| `memory.py` | Checkpointer SQLite, preferências e pedido ativo. |
 | `reply.py` | Schema da resposta e render das ofertas no WhatsApp. |
 
 `app.py` é a UI local em Streamlit. Não entra no fluxo do WhatsApp.
 
 | Variável | Exemplo |
 | --- | --- |
-| `OPENAI_API_KEY` | chave da OpenAI |
+| `OPENAI_API_KEY` | chave da OpenAI / AI Gateway |
+| `OPENAI_MODEL` | `gpt-5-mini` |
+| `OPENAI_REASONING_EFFORT` | `low` (ou `minimal`/`medium`) |
+| `OPENAI_VERBOSITY` | `low` |
 | `GATEWAY_URL` | `http://localhost:3000` |
 | `GATEWAY_TOKEN` | o mesmo segredo do gateway |
 | `TIMEZONE` | `America/Sao_Paulo` |

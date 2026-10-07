@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     openai_api_key: str = ""
+    openai_model: str = "gpt-5-mini"
+    # none|minimal|low|medium|high — low é o sweet spot para WhatsApp + tools.
+    openai_reasoning_effort: str = "low"
+    openai_verbosity: str = "low"
     gateway_url: str = ""
     gateway_token: str = ""
     timezone: str = "America/Sao_Paulo"
