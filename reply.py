@@ -11,8 +11,10 @@ class FlightOffer(BaseModel):
         description="Rota e horários, ex: GRU → LIS · 22:10 → 12:05 · 12/10"
     )
     details: str = Field(
-        default="",
-        description="Companhia, escalas e bagagem, se o resultado informar",
+        description=(
+            "Companhia, escalas e bagagem, se o resultado informar. "
+            "Use string vazia se não houver."
+        ),
     )
     booking_url: str = Field(description="URL de checkout da oferta")
 
@@ -26,9 +28,11 @@ class AgentReply(BaseModel):
         description="Texto humano da conversa. Nunca só ids de oferta."
     )
     offers: list[FlightOffer] = Field(
-        default_factory=list,
         max_length=3,
-        description="Até 3 ofertas com preço, rota e link. Vazio se não houver voos para mostrar.",
+        description=(
+            "Até 3 ofertas com preço, rota e link. "
+            "Use lista vazia se não houver voos para mostrar."
+        ),
     )
 
 

@@ -24,7 +24,10 @@ def test_render_includes_offer_fields_not_just_ids():
 
 
 def test_render_without_offers_is_just_the_message():
-    assert render_reply(AgentReply(message="De onde você sai?")) == "De onde você sai?"
+    assert (
+        render_reply(AgentReply(message="De onde você sai?", offers=[]))
+        == "De onde você sai?"
+    )
 
 
 def test_text_from_response_prefers_structured_offers():
@@ -58,7 +61,7 @@ def test_structured_schema_has_offer_payload_not_ids():
     assert "offer_ids" not in properties
     assert "offers" in properties
     offer_props = FlightOffer.model_json_schema()["properties"]
-    for field in ("price", "route", "booking_url"):
+    for field in ("price", "route", "details", "booking_url"):
         assert field in offer_props
 
 
@@ -79,6 +82,15 @@ def test_structured_schema_sets_additional_properties_false():
     for schema in objects:
         assert schema.get("additionalProperties") is False
     assert FlightOffer.model_json_schema().get("additionalProperties") is False
+
+
+def test_structured_schema_requires_every_property():
+    """OpenAI strict json_schema exige required == keys(properties)."""
+    root = AgentReply.model_json_schema()
+    for schema in _object_schemas(root):
+        properties = schema.get("properties") or {}
+        required = schema.get("required") or []
+        assert sorted(required) == sorted(properties)
 
 
 def test_text_from_response_falls_back_to_message_content():
