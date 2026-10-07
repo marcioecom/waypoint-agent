@@ -1,12 +1,13 @@
 import asyncio
 import uuid
 
-from langchain_core.runnables import RunnableConfig
 import streamlit as st
 from dotenv import load_dotenv
-from langchain.messages import HumanMessage
 
 from agent import build_agent
+from chat import run_agent
+from memory import AgentMemory
+from settings import settings
 
 load_dotenv()
 
@@ -15,16 +16,16 @@ st.set_page_config(page_title="Travel Assistant", page_icon="✈️")
 
 @st.cache_resource
 async def get_agent():
-    agent = await build_agent()
-    return agent
+    memory = AgentMemory.create(settings.sqlite_path)
+    await memory.start()
+    return await build_agent(memory)
 
 
 async def main() -> None:
     st.title("✈️ Travel Assistant")
-    st.caption("Pergunte sobre reservas, politicas do hotel ou destinos.")
+    st.caption("Busca de voos com a Dhay. Origem, destino e datas.")
 
     agent = await get_agent()
-    st.session_state.setdefault("messages", [])
     st.session_state.setdefault("chat_log", [])
     st.session_state.setdefault("thread_id", str(uuid.uuid4()))
 
@@ -39,22 +40,7 @@ async def main() -> None:
 
         with st.chat_message("assistant"):
             with st.spinner("Consultando o agente..."):
-                config: RunnableConfig = {
-                    "configurable": {"thread_id": st.session_state.thread_id}
-                }
-
-                result = await agent.ainvoke(
-                    {
-                        "messages": [
-                            *st.session_state.messages,
-                            HumanMessage(content=prompt),
-                        ]
-                    },
-                    config,
-                )
-
-            st.session_state.messages = result["messages"]
-            answer = result["messages"][-1].content
+                answer = await run_agent(agent, st.session_state.thread_id, prompt)
             st.write(answer)
             st.session_state.chat_log.append({"role": "assistant", "content": answer})
 

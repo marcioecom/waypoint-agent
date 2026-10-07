@@ -5,8 +5,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from agent import build_agent
+from memory import open_memory
 from middlewares.auth import GatewayAuthMiddleware
 from routers import message_routers_v1
+from settings import settings
 
 load_dotenv()
 
@@ -24,8 +26,10 @@ Experimentos disponíveis:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.agent = await build_agent()
-    yield
+    async with open_memory(settings.sqlite_path) as memory:
+        app.state.memory = memory
+        app.state.agent = await build_agent(memory)
+        yield
 
 
 app = FastAPI(lifespan=lifespan)

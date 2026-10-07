@@ -11,3 +11,9 @@ wheels/
 
 # envs
 .env
+
+# sqlite memory
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

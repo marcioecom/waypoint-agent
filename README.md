@@ -9,12 +9,18 @@ Agent de viagens. Recebe o texto de uma conversa, consulta o Kiwi e devolve a re
 
 Os dois serviços usam o mesmo `GATEWAY_TOKEN` no header `Authorization: Bearer ...`. Sem esse token, `/v1/messages` fica aberto.
 
-A memória da conversa é por `thread_id`, em `InMemorySaver`. Um restart esquece o histórico.
+A memória da conversa e as preferências do usuário ficam em SQLite (`SQLITE_PATH`, padrão `data/agent.sqlite`), por `thread_id`. O texto enviado ao WhatsApp é montado a partir da resposta estruturada (mensagem + ofertas com preço, rota e link), não só de ids.
 
 ```bash
 uv sync
 cp .env.example .env
 fastapi dev main.py
+```
+
+Testes:
+
+```bash
+uv run pytest
 ```
 
 `main.py` sobe o FastAPI. O resto fica em funções de módulo, no mesmo papel dos arquivos em `src/` do gateway:
@@ -26,7 +32,9 @@ fastapi dev main.py
 | `chat.py` | Roda o agent e agenda a resposta. |
 | `gateway.py` | Manda `{ jid, text }` de volta para o gateway. |
 | `middlewares/auth.py` | Exige o token só em `/v1/messages`. |
-| `agent.py` | Monta o modelo e as tools do Kiwi. |
+| `agent.py` | Monta o modelo, o prompt dinâmico e as tools. |
+| `memory.py` | Checkpointer SQLite e preferências por chat. |
+| `reply.py` | Schema da resposta e render das ofertas no WhatsApp. |
 
 `app.py` é a UI local em Streamlit. Não entra no fluxo do WhatsApp.
 
@@ -35,5 +43,7 @@ fastapi dev main.py
 | `OPENAI_API_KEY` | chave da OpenAI |
 | `GATEWAY_URL` | `http://localhost:3000` |
 | `GATEWAY_TOKEN` | o mesmo segredo do gateway |
+| `TIMEZONE` | `America/Sao_Paulo` |
+| `SQLITE_PATH` | `data/agent.sqlite` |
 
-No Railway, este é o segundo service. `GATEWAY_URL` usa a rede privada: `http://<gateway>.railway.internal:<porta>`.
+No Railway, este é o segundo service. `GATEWAY_URL` usa a rede privada: `http://<gateway>.railway.internal:<porta>`. Monte um volume em `data/` se quiser persistir o SQLite entre deploys.

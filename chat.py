@@ -5,6 +5,8 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 
 from gateway import send_message
+from memory import current_thread_id
+from reply import text_from_response
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +32,15 @@ def as_text(content: object) -> str:
 
 async def run_agent(agent, thread_id: str, message: str) -> str:
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
-    response = await agent.ainvoke(
-        {"messages": [HumanMessage(content=message)]},
-        config,
-    )
-    return as_text(response["messages"][-1].content).strip()
+    token = current_thread_id.set(thread_id)
+    try:
+        response = await agent.ainvoke(
+            {"messages": [HumanMessage(content=message)]},
+            config,
+        )
+    finally:
+        current_thread_id.reset(token)
+    return text_from_response(response, as_text)
 
 
 async def _deliver(agent, thread_id: str, message: str) -> None:
