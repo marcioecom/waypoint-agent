@@ -2,8 +2,8 @@ import asyncio
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from agent import SYSTEM_PROMPT, build_system_prompt
-from memory import Preferences, open_memory
+from agent import SYSTEM_PROMPT, _preference_tool, build_system_prompt
+from memory import AgentMemory, Preferences, current_thread_id, open_memory
 
 
 def test_preferences_roundtrip(tmp_path):
@@ -42,6 +42,19 @@ def test_system_prompt_includes_today_and_preferences(tmp_path):
     assert "Nunca só ids" in SYSTEM_PROMPT
     assert "save_user_preferences" in SYSTEM_PROMPT
     assert "questionário" in SYSTEM_PROMPT.lower()
+
+
+def test_save_user_preferences_tool_uses_thread_context(tmp_path):
+    memory = AgentMemory.create(tmp_path / "agent.sqlite")
+    tool = _preference_tool(memory)
+    token = current_thread_id.set("wa-1")
+    try:
+        result = tool.invoke({"home_city": "Recife", "cabin": "econômica"})
+    finally:
+        current_thread_id.reset(token)
+    assert "Recife" in result
+    assert memory.prefs.get("wa-1")["home_city"] == "Recife"
+    assert "runtime" not in tool.args
 
 
 def test_open_memory_uses_sqlite_checkpointer(tmp_path):

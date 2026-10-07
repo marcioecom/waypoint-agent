@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from langchain.agents import create_agent
 from langchain.agents.middleware import wrap_model_call
 from langchain.agents.middleware.types import dynamic_prompt
-from langchain.tools import ToolRuntime, tool
+from langchain.tools import tool
 from langchain_core.messages import trim_messages
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -72,7 +72,6 @@ def build_system_prompt(
 def _preference_tool(memory: AgentMemory):
     @tool
     def save_user_preferences(
-        runtime: ToolRuntime,
         home_city: str | None = None,
         cabin: str | None = None,
         currency: str | None = None,
@@ -80,10 +79,7 @@ def _preference_tool(memory: AgentMemory):
         notes: str | None = None,
     ) -> str:
         """Salva preferências estáveis (origem habitual, classe, moeda, adultos)."""
-        thread_id = ""
-        if runtime.config:
-            thread_id = str(runtime.config.get("configurable", {}).get("thread_id") or "")
-        thread_id = thread_id or current_thread_id.get()
+        thread_id = current_thread_id.get()
         if not thread_id:
             return "Não consegui associar as preferências a este chat."
         saved = memory.prefs.update(
