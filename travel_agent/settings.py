@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     openai_verbosity: str = "low"
     gateway_url: str = ""
     gateway_token: str = ""
+    admin_token: str = ""
     timezone: str = "America/Sao_Paulo"
     sqlite_path: Path = Path("data/agent.sqlite")
 

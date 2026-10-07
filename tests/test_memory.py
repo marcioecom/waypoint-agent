@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -170,3 +171,49 @@ def test_concurrent_trip_updates_do_not_raise(tmp_path):
     assert saved["origin"] == "Palmas"
     assert saved["status"] == "searched"
     assert saved["notes"].startswith("n")
+
+
+def _count_rows(path, table: str, thread_id: str) -> int:
+    conn = sqlite3.connect(path)
+    try:
+        return conn.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE thread_id = ?",
+            (thread_id,),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_reset_thread_clears_prefs_brief_and_checkpoints(tmp_path):
+    async def _run():
+        checkpoint = tmp_path / "agent.sqlite"
+        async with open_memory(checkpoint) as memory:
+            jid = "5511999999999@s.whatsapp.net"
+            other = "other@s.whatsapp.net"
+            memory.prefs.update(jid, home_city="Palmas")
+            memory.trips.update(jid, origin="Palmas", destination="Santiago, Chile")
+            memory.prefs.update(other, home_city="Recife")
+            conn = sqlite3.connect(checkpoint)
+            conn.execute(
+                "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, checkpoint, metadata) "
+                "VALUES (?, '', 'c1', ?, ?)",
+                (jid, b"x", b"{}"),
+            )
+            conn.execute(
+                "INSERT INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value) "
+                "VALUES (?, '', 'c1', 't1', 0, 'msg', ?)",
+                (jid, b"x"),
+            )
+            conn.commit()
+            conn.close()
+
+            await memory.reset_thread(jid)
+            await memory.reset_thread(jid)
+
+            assert memory.prefs.get(jid) == {}
+            assert memory.trips.get(jid) == {}
+            assert memory.prefs.get(other)["home_city"] == "Recife"
+            assert _count_rows(checkpoint, "checkpoints", jid) == 0
+            assert _count_rows(checkpoint, "writes", jid) == 0
+
+    asyncio.run(_run())
