@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -72,10 +73,13 @@ def test_system_prompt_includes_today_trip_and_preferences(tmp_path):
     assert "Curitiba" in prompt
     assert "PEDIDO ATIVO" in prompt
     assert "Palmas" in prompt
-    assert "Continuidade" in SYSTEM_PROMPT
+    assert "CONTINUIDADE" in SYSTEM_PROMPT
     assert "update_trip_brief" in SYSTEM_PROMPT
     assert "save_user_preferences" in SYSTEM_PROMPT
-    assert "questionário" in SYSTEM_PROMPT.lower()
+    assert "Olá! Como posso ajudar?" in SYSTEM_PROMPT
+    assert "Santiago, Chile" in SYSTEM_PROMPT
+    assert "rotule um destino diferente" in SYSTEM_PROMPT
+    assert "*negrito*" in SYSTEM_PROMPT
 
 
 def test_save_user_preferences_tool_uses_thread_context(tmp_path):
@@ -109,6 +113,18 @@ def test_update_trip_brief_tool_uses_thread_context(tmp_path):
         current_thread_id.reset(token)
     assert "Palmas" in result
     assert memory.trips.get("wa-2")["destination"] == "São Paulo"
+
+
+def test_update_trip_brief_keeps_santiago_disambiguated(tmp_path):
+    memory = AgentMemory.create(tmp_path / "agent.sqlite")
+    tool = trip_tool(memory)
+    token = current_thread_id.set("wa-scl")
+    try:
+        result = tool.invoke({"destination": "Santiago", "status": "collecting"})
+    finally:
+        current_thread_id.reset(token)
+    assert "Santiago, Chile" in result
+    assert memory.trips.get("wa-scl")["destination"] == "Santiago, Chile"
 
 
 def test_open_memory_uses_sqlite_checkpointer(tmp_path):
@@ -155,3 +171,49 @@ def test_concurrent_trip_updates_do_not_raise(tmp_path):
     assert saved["origin"] == "Palmas"
     assert saved["status"] == "searched"
     assert saved["notes"].startswith("n")
+
+
+def _count_rows(path, table: str, thread_id: str) -> int:
+    conn = sqlite3.connect(path)
+    try:
+        return conn.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE thread_id = ?",
+            (thread_id,),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_reset_thread_clears_prefs_brief_and_checkpoints(tmp_path):
+    async def _run():
+        checkpoint = tmp_path / "agent.sqlite"
+        async with open_memory(checkpoint) as memory:
+            jid = "5511999999999@s.whatsapp.net"
+            other = "other@s.whatsapp.net"
+            memory.prefs.update(jid, home_city="Palmas")
+            memory.trips.update(jid, origin="Palmas", destination="Santiago, Chile")
+            memory.prefs.update(other, home_city="Recife")
+            conn = sqlite3.connect(checkpoint)
+            conn.execute(
+                "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, checkpoint, metadata) "
+                "VALUES (?, '', 'c1', ?, ?)",
+                (jid, b"x", b"{}"),
+            )
+            conn.execute(
+                "INSERT INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value) "
+                "VALUES (?, '', 'c1', 't1', 0, 'msg', ?)",
+                (jid, b"x"),
+            )
+            conn.commit()
+            conn.close()
+
+            await memory.reset_thread(jid)
+            await memory.reset_thread(jid)
+
+            assert memory.prefs.get(jid) == {}
+            assert memory.trips.get(jid) == {}
+            assert memory.prefs.get(other)["home_city"] == "Recife"
+            assert _count_rows(checkpoint, "checkpoints", jid) == 0
+            assert _count_rows(checkpoint, "writes", jid) == 0
+
+    asyncio.run(_run())

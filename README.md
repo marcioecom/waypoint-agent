@@ -63,7 +63,18 @@ tests/
 | `OPENAI_VERBOSITY` | `low` |
 | `GATEWAY_URL` | `http://localhost:3000` |
 | `GATEWAY_TOKEN` | o mesmo segredo do gateway |
+| `ADMIN_TOKEN` | token do `DELETE` admin (sem ele, o endpoint recusa) |
 | `TIMEZONE` | `America/Sao_Paulo` |
 | `SQLITE_PATH` | `data/agent.sqlite` |
+
+Para zerar um chat de teste (preferências, pedido ativo e histórico LangGraph):
+
+```bash
+curl -X DELETE \
+  "http://localhost:8000/v1/admin/threads/5511999999999%40s.whatsapp.net" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+O `thread_id` é o mesmo JID do WhatsApp usado em `POST /v1/messages`. Sem `ADMIN_TOKEN` no ambiente, ou com token errado, a resposta é `401`. Apagar uma thread que não existe devolve `200`.
 
 No Railway, este é o segundo service. `GATEWAY_URL` usa a rede privada: `http://<gateway>.railway.internal:<porta>`. Monte um volume em `data/` se quiser persistir o SQLite entre deploys.

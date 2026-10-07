@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from travel_agent.agent import build_agent
 from travel_agent.agent.memory import open_memory
+from travel_agent.api.admin import router as admin_router
 from travel_agent.api.auth import GatewayAuthMiddleware
 from travel_agent.api.messages import router as messages_router
 from travel_agent.settings import settings
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(GatewayAuthMiddleware)
 app.include_router(messages_router, prefix="/v1")
+app.include_router(admin_router, prefix="/v1")
 
 
 @app.get("/")

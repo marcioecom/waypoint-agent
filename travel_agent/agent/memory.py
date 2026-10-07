@@ -159,6 +159,11 @@ class Preferences:
             return "Nenhuma preferência salva ainda para este chat."
         return "\n".join(lines)
 
+    def clear(self, thread_id: str) -> None:
+        with self._locked_conn() as conn:
+            conn.execute("DELETE FROM user_prefs WHERE thread_id = ?", (thread_id,))
+            conn.commit()
+
 
 class TripBrief:
     """Pedido ativo da conversa — sobrevive a trim/histórico longo."""
@@ -284,6 +289,13 @@ class AgentMemory:
         self.checkpointer = await self._cm.__aenter__()
         await self.checkpointer.setup()
         return self
+
+    async def reset_thread(self, thread_id: str) -> None:
+        """Apaga prefs, pedido ativo e checkpoints dessa conversa."""
+        self.prefs.clear(thread_id)
+        self.trips.clear(thread_id)
+        if self.checkpointer is not None:
+            await self.checkpointer.adelete_thread(thread_id)
 
     async def close(self) -> None:
         if self._cm is None:
