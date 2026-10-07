@@ -117,7 +117,6 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
             )
             return json.dumps(
                 {
-                    "status": "destination_mismatch",
                     "query": compressed.get("query"),
                     "destination": fly_to,
                     "resultsCount": 0,
@@ -136,8 +135,6 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
         compressed["offers"] = matched or offers
         compressed["destination"] = fly_to
         compressed["arrivalAirports"] = arrival_airports(compressed["offers"])
-        if "status" not in compressed:
-            compressed["status"] = "ok" if compressed["offers"] else "empty"
         return json.dumps(compressed, ensure_ascii=False)
 
     return search_flights

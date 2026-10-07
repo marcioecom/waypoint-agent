@@ -48,18 +48,6 @@ def render_reply(reply: AgentReply) -> str:
     return "\n\n".join(part for part in parts if part).strip()
 
 
-SEARCH_BUDGET_FALLBACK = (
-    "Parei as buscas pra não ficar rodando em círculo. "
-    "Quer tentar outra origem, datas ou duração da estadia?"
-)
-
-_LIMIT_MARKERS = (
-    "call limits exceeded",
-    "model call limits exceeded",
-    "tool call limit exceeded",
-)
-
-
 def text_from_response(response: dict, as_text) -> str:
     structured = response.get("structured_response")
     if structured is not None:
@@ -77,7 +65,4 @@ def text_from_response(response: dict, as_text) -> str:
     messages = response.get("messages") or []
     if not messages:
         return ""
-    text = as_text(messages[-1].content).strip()
-    if text and any(marker in text.casefold() for marker in _LIMIT_MARKERS):
-        return SEARCH_BUDGET_FALLBACK
-    return text
+    return as_text(messages[-1].content).strip()

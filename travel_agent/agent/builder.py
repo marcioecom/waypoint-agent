@@ -7,12 +7,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_openai import ChatOpenAI
 
 from travel_agent.agent.memory import AgentMemory, current_thread_id
-from travel_agent.agent.middleware import (
-    build_call_limit_middleware,
-    compact_history,
-    dedupe_search_flights,
-    guard_post_search,
-)
+from travel_agent.agent.middleware import compact_history, guard_post_search
 from travel_agent.agent.prompt import build_system_prompt
 from travel_agent.agent.reply import AgentReply
 from travel_agent.agent.tools import (
@@ -56,21 +51,15 @@ async def build_agent(memory: AgentMemory):
         reasoning_effort=settings.openai_reasoning_effort,
         verbosity=settings.openai_verbosity,
     )
-    agent = create_agent(
+    return create_agent(
         model,
         tools=tools,
         checkpointer=memory.checkpointer,
         middleware=[
             current_context,
-            *build_call_limit_middleware(
-                search_run_limit=settings.search_run_limit,
-                model_run_limit=settings.model_run_limit,
-            ),
-            dedupe_search_flights,
             compact_history,
             guard_post_search,
         ],
         response_format=ToolStrategy(AgentReply),
         name="dhay",
     )
-    return agent.with_config({"recursion_limit": settings.agent_recursion_limit})

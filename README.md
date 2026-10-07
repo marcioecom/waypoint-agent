@@ -66,9 +66,6 @@ tests/
 | `ADMIN_TOKEN` | token do `DELETE` admin (sem ele, o endpoint recusa) |
 | `TIMEZONE` | `America/Sao_Paulo` |
 | `SQLITE_PATH` | `data/agent.sqlite` |
-| `SEARCH_RUN_LIMIT` | `2` (máx. buscas Kiwi por turno) |
-| `MODEL_RUN_LIMIT` | `8` (máx. chamadas ao modelo por turno) |
-| `AGENT_RECURSION_LIMIT` | `25` (teto do grafo LangGraph) |
 
 Para zerar um chat de teste (preferências, pedido ativo e histórico LangGraph):
 

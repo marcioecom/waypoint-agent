@@ -220,8 +220,6 @@ class TripBrief:
                         current = loaded
                 except json.JSONDecodeError:
                     current = {}
-            previous_destination = current.get("destination")
-            notes_provided = fields.get("notes") is not None
             for key, value in fields.items():
                 if key not in _TRIP_KEYS or value is None:
                     continue
@@ -230,14 +228,6 @@ class TripBrief:
                     if not value:
                         continue
                 current[key] = value
-            # Pedido novo (outro destino) não herda notas da viagem anterior.
-            if (
-                previous_destination
-                and current.get("destination")
-                and previous_destination != current["destination"]
-                and not notes_provided
-            ):
-                current.pop("notes", None)
             if "status" not in current:
                 current["status"] = "collecting"
             payload = json.dumps(current, ensure_ascii=False)

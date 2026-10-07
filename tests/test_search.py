@@ -99,7 +99,6 @@ def test_mismatch_retries_iata_and_does_not_return_wrong_offers(tmp_path):
     assert [call["flyTo"] for call in kiwi.calls] == ["Santiago, Chile", "SCL"]
     assert payload["offers"] == []
     assert payload["resultsCount"] == 0
-    assert payload["status"] == "destination_mismatch"
     assert "RAI" in payload["note"]
     assert "Chile" in payload["note"]
     assert "Não apresente" in payload["note"]

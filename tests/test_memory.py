@@ -58,40 +58,6 @@ def test_trip_brief_roundtrip_and_prompt(tmp_path):
     assert trips.prompt_block("other").startswith("Nenhum pedido ativo")
 
 
-def test_trip_brief_clears_notes_when_destination_changes(tmp_path):
-    trips = TripBrief(tmp_path / "agent.sqlite")
-    trips.update(
-        "chat-1",
-        origin="Palmas",
-        destination="Santiago, Chile",
-        notes="Estar lá dia 16/08/2027",
-        status="searched",
-    )
-    trips.update(
-        "chat-1",
-        destination="Denpasar, Indonesia",
-        status="searched",
-    )
-    saved = trips.get("chat-1")
-    assert saved["destination"] == "Denpasar, Indonesia"
-    assert "notes" not in saved
-
-
-def test_trip_brief_keeps_notes_when_explicitly_updated(tmp_path):
-    trips = TripBrief(tmp_path / "agent.sqlite")
-    trips.update(
-        "chat-1",
-        destination="Santiago, Chile",
-        notes="nota antiga",
-    )
-    trips.update(
-        "chat-1",
-        destination="Denpasar, Indonesia",
-        notes="Estadia 7 noites; qualquer data",
-    )
-    assert trips.get("chat-1")["notes"] == "Estadia 7 noites; qualquer data"
-
-
 def test_system_prompt_includes_today_trip_and_preferences(tmp_path):
     prefs = Preferences(tmp_path / "agent.sqlite")
     trips = TripBrief(tmp_path / "agent.sqlite")
@@ -114,8 +80,6 @@ def test_system_prompt_includes_today_trip_and_preferences(tmp_path):
     assert "Santiago, Chile" in SYSTEM_PROMPT
     assert "rotule um destino diferente" in SYSTEM_PROMPT
     assert "*negrito*" in SYSTEM_PROMPT
-    assert "status=empty" in SYSTEM_PROMPT
-    assert "bloqueia consulta idêntica" in SYSTEM_PROMPT
 
 
 def test_save_user_preferences_tool_uses_thread_context(tmp_path):

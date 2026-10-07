@@ -139,33 +139,7 @@ def offer_from_itinerary(itinerary: dict[str, Any]) -> dict[str, str]:
 def compress_search_payload(payload: Any, *, limit: int = 5) -> dict[str, Any]:
     data = _unwrap_mcp_payload(payload)
     if not isinstance(data, dict):
-        return {
-            "status": "provider_error",
-            "resultsCount": 0,
-            "offers": [],
-            "error": "Resposta inválida do provedor.",
-            "raw": str(payload)[:500],
-            "note": (
-                "Falha ao interpretar a resposta do provedor. "
-                "Não diga que não há voos; reporte o problema ou tente parâmetros válidos."
-            ),
-        }
-
-    provider_error = data.get("error")
-    if provider_error:
-        return {
-            "status": "provider_error",
-            "query": data.get("query"),
-            "currency": data.get("currency"),
-            "passengers": data.get("passengers"),
-            "resultsCount": 0,
-            "offers": [],
-            "error": str(provider_error),
-            "note": (
-                "Erro do provedor ou parâmetro inválido. "
-                "Corrija os argumentos; não diga que não há voos."
-            ),
-        }
+        return {"resultsCount": 0, "offers": [], "raw": str(payload)[:500]}
 
     itineraries = data.get("itineraries")
     if not isinstance(itineraries, list):
@@ -182,27 +156,18 @@ def compress_search_payload(payload: Any, *, limit: int = 5) -> dict[str, Any]:
     if offers and (not results_count or results_count == 0):
         results_count = len(offers)
 
-    if offers:
-        status = "ok"
-        note = (
-            "Copie price/route/details/booking_url das offers para AgentReply. "
-            "Não invente dados."
-        )
-    else:
-        status = "empty"
-        note = (
-            "Sem itinerários para estes parâmetros. "
-            "No máximo um ajuste diferente neste turno; depois finalize com AgentReply."
-        )
-
     return {
-        "status": status,
         "query": data.get("query"),
         "currency": data.get("currency"),
         "passengers": data.get("passengers"),
         "resultsCount": results_count,
         "offers": offers,
-        "note": note,
+        "note": (
+            "Copie price/route/details/booking_url das offers para AgentReply. "
+            "Não invente dados."
+            if offers
+            else "Sem itinerários. Ajuste a busca e tente de novo sem perguntar menu."
+        ),
     }
 
 
