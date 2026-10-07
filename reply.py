@@ -1,8 +1,10 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FlightOffer(BaseModel):
     """Oferta copiada do resultado da busca. Nunca inventar nem enviar só o id."""
+
+    model_config = ConfigDict(extra="forbid")
 
     price: str = Field(description="Preço já formatado, ex: R$ 3.240,00")
     route: str = Field(
@@ -17,6 +19,8 @@ class FlightOffer(BaseModel):
 
 class AgentReply(BaseModel):
     """Resposta montada pela aplicação para o WhatsApp."""
+
+    model_config = ConfigDict(extra="forbid")
 
     message: str = Field(
         description="Texto humano da conversa. Nunca só ids de oferta."

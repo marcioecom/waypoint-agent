@@ -62,6 +62,25 @@ def test_structured_schema_has_offer_payload_not_ids():
         assert field in offer_props
 
 
+def _object_schemas(schema: dict):
+    if schema.get("type") == "object" or "properties" in schema:
+        yield schema
+    for defn in schema.get("$defs", {}).values():
+        yield from _object_schemas(defn)
+    for defn in schema.get("definitions", {}).values():
+        yield from _object_schemas(defn)
+
+
+def test_structured_schema_sets_additional_properties_false():
+    root = AgentReply.model_json_schema()
+    assert root.get("additionalProperties") is False
+    objects = list(_object_schemas(root))
+    assert objects
+    for schema in objects:
+        assert schema.get("additionalProperties") is False
+    assert FlightOffer.model_json_schema().get("additionalProperties") is False
+
+
 def test_text_from_response_falls_back_to_message_content():
     class Msg:
         content = "Oi! Sou a Dhay."
