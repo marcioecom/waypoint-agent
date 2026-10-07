@@ -72,12 +72,13 @@ def test_system_prompt_includes_today_trip_and_preferences(tmp_path):
     assert "Curitiba" in prompt
     assert "PEDIDO ATIVO" in prompt
     assert "Palmas" in prompt
-    assert "Continuidade" in SYSTEM_PROMPT
+    assert "CONTINUIDADE" in SYSTEM_PROMPT
     assert "update_trip_brief" in SYSTEM_PROMPT
     assert "save_user_preferences" in SYSTEM_PROMPT
-    assert "questionário" in SYSTEM_PROMPT.lower()
+    assert "Olá! Como posso ajudar?" in SYSTEM_PROMPT
     assert "Santiago, Chile" in SYSTEM_PROMPT
     assert "rotule um destino diferente" in SYSTEM_PROMPT
+    assert "*negrito*" in SYSTEM_PROMPT
 
 
 def test_save_user_preferences_tool_uses_thread_context(tmp_path):

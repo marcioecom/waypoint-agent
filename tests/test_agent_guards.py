@@ -69,4 +69,4 @@ def test_guard_post_search_patches_empty_offers_after_search():
     assert isinstance(response, ModelResponse)
     assert response.structured_response is not None
     assert len(response.structured_response.offers) == 1
-    assert "Encontrei estas opções" in response.structured_response.message
+    assert "Melhor que achei" in response.structured_response.message

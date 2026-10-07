@@ -31,10 +31,7 @@ async def guard_post_search(request, handler):
 
     message = getattr(structured, "message", "") or ""
     if looks_like_cold_start(message):
-        message = (
-            "Encontrei estas opções com o que combinamos. "
-            "Se quiser, ajusto datas ou aeroportos."
-        )
+        message = "Melhor que achei com o que a gente tinha:"
     patched = AgentReply(message=message, offers=recent_offers[:3])
     return replace(response, structured_response=patched)
 
