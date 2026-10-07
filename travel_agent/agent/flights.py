@@ -57,20 +57,33 @@ def _unwrap_mcp_payload(payload: Any) -> Any:
     return data
 
 
-def _fmt_local(value: str | None) -> str:
-    if not value:
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _as_str(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _fmt_local(value: Any) -> str:
+    text = _as_str(value)
+    if not text:
         return ""
     try:
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
-        return value
+        return text
     return f"{dt.day:02d}/{dt.month:02d} {dt.hour:02d}:{dt.minute:02d}"
 
 
 def _route_line(leg: dict[str, Any] | None) -> str:
     if not isinstance(leg, dict):
         return ""
-    airports = leg.get("route") or []
+    airports = _as_list(leg.get("route"))
     path = " → ".join(str(code) for code in airports if code)
     dep = _fmt_local(leg.get("departureTime"))
     arr = _fmt_local(leg.get("arrivalTime"))
@@ -81,8 +94,8 @@ def _route_line(leg: dict[str, Any] | None) -> str:
 
 
 def _details_line(itinerary: dict[str, Any]) -> str:
-    outbound = itinerary.get("outbound") if isinstance(itinerary.get("outbound"), dict) else {}
-    segments = outbound.get("segments") if isinstance(outbound.get("segments"), list) else []
+    outbound = _as_dict(itinerary.get("outbound"))
+    segments = _as_list(outbound.get("segments"))
     carriers: list[str] = []
     for segment in segments:
         if not isinstance(segment, dict):
@@ -94,7 +107,7 @@ def _details_line(itinerary: dict[str, Any]) -> str:
     stop_text = ""
     if isinstance(stops, int):
         stop_text = "direto" if stops == 0 else f"{stops} escala(s)"
-    baggage = itinerary.get("baggage") if isinstance(itinerary.get("baggage"), dict) else {}
+    baggage = _as_dict(itinerary.get("baggage"))
     bags: list[str] = []
     if baggage.get("cabinBag"):
         bags.append(f"{baggage['cabinBag']} mão")
@@ -105,8 +118,8 @@ def _details_line(itinerary: dict[str, Any]) -> str:
 
 
 def offer_from_itinerary(itinerary: dict[str, Any]) -> dict[str, str]:
-    outbound = itinerary.get("outbound") if isinstance(itinerary.get("outbound"), dict) else {}
-    inbound = itinerary.get("inbound") if isinstance(itinerary.get("inbound"), dict) else None
+    outbound = _as_dict(itinerary.get("outbound"))
+    inbound = _as_dict(itinerary.get("inbound")) or None
     route_parts = [_route_line(outbound)]
     if inbound:
         inbound_line = _route_line(inbound)
@@ -126,7 +139,33 @@ def offer_from_itinerary(itinerary: dict[str, Any]) -> dict[str, str]:
 def compress_search_payload(payload: Any, *, limit: int = 5) -> dict[str, Any]:
     data = _unwrap_mcp_payload(payload)
     if not isinstance(data, dict):
-        return {"resultsCount": 0, "offers": [], "raw": str(payload)[:500]}
+        return {
+            "status": "provider_error",
+            "resultsCount": 0,
+            "offers": [],
+            "error": "Resposta inválida do provedor.",
+            "raw": str(payload)[:500],
+            "note": (
+                "Falha ao interpretar a resposta do provedor. "
+                "Não diga que não há voos; reporte o problema ou tente parâmetros válidos."
+            ),
+        }
+
+    provider_error = data.get("error")
+    if provider_error:
+        return {
+            "status": "provider_error",
+            "query": data.get("query"),
+            "currency": data.get("currency"),
+            "passengers": data.get("passengers"),
+            "resultsCount": 0,
+            "offers": [],
+            "error": str(provider_error),
+            "note": (
+                "Erro do provedor ou parâmetro inválido. "
+                "Corrija os argumentos; não diga que não há voos."
+            ),
+        }
 
     itineraries = data.get("itineraries")
     if not isinstance(itineraries, list):
@@ -143,18 +182,27 @@ def compress_search_payload(payload: Any, *, limit: int = 5) -> dict[str, Any]:
     if offers and (not results_count or results_count == 0):
         results_count = len(offers)
 
+    if offers:
+        status = "ok"
+        note = (
+            "Copie price/route/details/booking_url das offers para AgentReply. "
+            "Não invente dados."
+        )
+    else:
+        status = "empty"
+        note = (
+            "Sem itinerários para estes parâmetros. "
+            "No máximo um ajuste diferente neste turno; depois finalize com AgentReply."
+        )
+
     return {
+        "status": status,
         "query": data.get("query"),
         "currency": data.get("currency"),
         "passengers": data.get("passengers"),
         "resultsCount": results_count,
         "offers": offers,
-        "note": (
-            "Copie price/route/details/booking_url das offers para AgentReply. "
-            "Não invente dados."
-            if offers
-            else "Sem itinerários. Ajuste a busca e tente de novo sem perguntar menu."
-        ),
+        "note": note,
     }
 
 

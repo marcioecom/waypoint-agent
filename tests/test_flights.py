@@ -57,9 +57,32 @@ def test_compress_search_payload_limits_offers():
         ],
     }
     compressed = compress_search_payload(payload, limit=5)
+    assert compressed["status"] == "ok"
     assert compressed["resultsCount"] == 10
     assert len(compressed["offers"]) == 5
     assert "Copie price/route" in compressed["note"]
+
+
+def test_compress_empty_is_not_a_retry_command():
+    compressed = compress_search_payload(
+        {"resultsCount": 0, "itineraries": [], "error": None}
+    )
+    assert compressed["status"] == "empty"
+    assert compressed["offers"] == []
+    assert "tente de novo" not in compressed["note"].casefold()
+
+
+def test_compress_preserves_provider_error():
+    compressed = compress_search_payload(
+        {
+            "resultsCount": 0,
+            "itineraries": [],
+            "error": "Currency 'BRR' is not supported.",
+        }
+    )
+    assert compressed["status"] == "provider_error"
+    assert "BRR" in compressed["error"]
+    assert "não diga que não há voos" in compressed["note"].casefold()
 
 
 def test_compress_unwraps_mcp_content_blocks():

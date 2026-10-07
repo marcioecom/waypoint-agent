@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     admin_token: str = ""
     timezone: str = "America/Sao_Paulo"
     sqlite_path: Path = Path("data/agent.sqlite")
+    # Orçamento do agente por turno (limites executáveis, não só prompt).
+    search_run_limit: int = 2
+    model_run_limit: int = 8
+    agent_recursion_limit: int = 25
 
 
 settings = Settings()
