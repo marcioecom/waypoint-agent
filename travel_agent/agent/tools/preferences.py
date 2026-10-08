@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
 from langchain.tools import tool
+from pydantic import Field
 
 from travel_agent.agent.memory import AgentMemory, current_thread_id
 
@@ -8,9 +11,17 @@ from travel_agent.agent.memory import AgentMemory, current_thread_id
 def preference_tool(memory: AgentMemory):
     @tool
     def save_user_preferences(
-        home_city: str | None = None,
+        home_city: Annotated[
+            str | None,
+            Field(
+                default=None,
+                description=(
+                    'Origem habitual: IATA ("PMW") ou cidade simples ("Palmas"). Sem país.'
+                ),
+            ),
+        ] = None,
         cabin: str | None = None,
-        currency: str | None = None,
+        currency: Literal["BRL", "USD", "EUR"] | None = None,
         adults: int | None = None,
         notes: str | None = None,
     ) -> str:

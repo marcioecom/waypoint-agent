@@ -1,7 +1,7 @@
 import asyncio
 import json
+import inspect
 
-from travel_agent.agent.memory import AgentMemory, current_thread_id
 from travel_agent.agent.tools.search import search_tool
 
 
@@ -15,113 +15,119 @@ def _leg(route: list[str], day: str) -> dict:
     }
 
 
-def kiwi_payload(destination_iata: str) -> dict:
-    return {
-        "query": f"Palmas → {destination_iata} on 14/08/2027, returning 21/08/2027",
-        "currency": "BRL",
-        "resultsCount": 1,
-        "itineraries": [
+def kiwi_payload(destination_iata: str, *, results: int = 1) -> dict:
+    itineraries = []
+    if results:
+        itineraries.append(
             {
                 "priceFormatted": "R$ 2.100,00",
                 "bookingUrl": f"https://kiwi/{destination_iata.lower()}",
                 "outbound": _leg(["PMW", "GRU", destination_iata], "2027-08-14"),
                 "inbound": _leg([destination_iata, "GRU", "PMW"], "2027-08-21"),
             }
-        ],
+        )
+    return {
+        "query": f"Palmas → {destination_iata} on 14/08/2027, returning 21/08/2027",
+        "currency": "BRL",
+        "resultsCount": results,
+        "itineraries": itineraries,
     }
 
 
 class FakeKiwi:
-    """Responde SCL só quando a query já veio desambiguada; senão RAI."""
-
-    def __init__(self, always: str | None = None):
+    def __init__(self, always: str | None = None, *, empty: bool = False):
         self.calls: list[dict] = []
         self.always = always
+        self.empty = empty
 
     async def ainvoke(self, args: dict) -> dict:
         self.calls.append(args)
+        if self.empty:
+            return kiwi_payload(str(args["flyTo"]), results=0)
         if self.always:
             return kiwi_payload(self.always)
         fly_to = str(args["flyTo"])
-        folded = fly_to.casefold()
-        dest = "SCL" if "chile" in folded or fly_to.upper() == "SCL" else "RAI"
-        return kiwi_payload(dest)
+        dest = fly_to.upper() if len(fly_to) == 3 else fly_to
+        return kiwi_payload(dest if dest.isascii() else "GRU")
 
 
-def _search(memory: AgentMemory, kiwi: FakeKiwi, fly_to: str, thread_id: str = "wa-1"):
-    tool = search_tool(memory, kiwi)
-    token = current_thread_id.set(thread_id)
-    try:
-        raw = asyncio.run(
-            tool.ainvoke(
-                {
-                    "fly_from": "Palmas",
-                    "fly_to": fly_to,
-                    "departure_date": "14/08/2027",
-                    "return_date": "21/08/2027",
-                    "adults": 2,
-                }
-            )
+def _search(kiwi: FakeKiwi, fly_from: str, fly_to: str) -> dict:
+    tool = search_tool(kiwi)
+    raw = asyncio.run(
+        tool.ainvoke(
+            {
+                "fly_from": fly_from,
+                "fly_to": fly_to,
+                "departure_date": "14/08/2027",
+                "return_date": "21/08/2027",
+                "adults": 2,
+            }
         )
-    finally:
-        current_thread_id.reset(token)
+    )
     return json.loads(raw)
 
 
-def test_santiago_search_goes_to_chile_not_cape_verde(tmp_path):
-    memory = AgentMemory.create(tmp_path / "agent.sqlite")
-    kiwi = FakeKiwi()
-    payload = _search(memory, kiwi, "Santiago")
+def _schema(tool) -> dict:
+    return tool.get_input_schema().model_json_schema()
 
-    assert kiwi.calls[0]["flyTo"] == "Santiago, Chile"
-    assert payload["destination"] == "Santiago, Chile"
-    assert payload["offers"]
+
+def test_city_or_iata_is_sent_as_is():
+    kiwi = FakeKiwi(always="SCL")
+    payload = _search(kiwi, "Palmas", "SCL")
+
+    assert kiwi.calls[0]["flyTo"] == "SCL"
+    assert kiwi.calls[0]["flyFrom"] == "Palmas"
+    assert payload["status"] == "ok"
+    assert payload["destination"] == "SCL"
     assert "SCL" in payload["offers"][0]["route"]
-    assert "RAI" not in payload["offers"][0]["route"]
-    assert memory.trips.get("wa-1")["destination"] == "Santiago, Chile"
+    assert len(kiwi.calls) == 1
 
 
-def test_chile_santiago_keeps_country_in_brief_and_query(tmp_path):
-    memory = AgentMemory.create(tmp_path / "agent.sqlite")
-    kiwi = FakeKiwi()
-    payload = _search(memory, kiwi, "Chile Santiago")
+def test_simple_city_name_is_not_rewritten_with_country():
+    kiwi = FakeKiwi(always="GRU")
+    payload = _search(kiwi, "Palmas", "São Paulo")
+
+    assert kiwi.calls[0]["flyFrom"] == "Palmas"
+    assert kiwi.calls[0]["flyTo"] == "São Paulo"
+    assert payload["destination"] == "São Paulo"
+    assert payload["status"] == "ok"
+
+
+def test_empty_search_explains_next_step_not_wrong_destination():
+    kiwi = FakeKiwi(empty=True)
+    payload = _search(kiwi, "Palmas, Brasil", "Santiago, Chile")
 
     assert kiwi.calls[0]["flyTo"] == "Santiago, Chile"
-    assert payload["arrivalAirports"] == ["SCL"]
-    assert memory.trips.get("wa-1")["destination"] == "Santiago, Chile"
+    assert payload["status"] == "empty"
+    assert payload["resultsCount"] == 0
+    assert payload["offers"] == []
+    assert "IATA" in payload["hint"]
+    assert "Cidade, País" in payload["hint"]
+    assert "destino inesperado" not in json.dumps(payload)
 
 
-def test_mismatch_retries_iata_and_does_not_return_wrong_offers(tmp_path):
-    memory = AgentMemory.create(tmp_path / "agent.sqlite")
+def test_iata_mismatch_does_not_retry_or_return_wrong_offers():
     kiwi = FakeKiwi(always="RAI")
-    payload = _search(memory, kiwi, "Santiago")
+    payload = _search(kiwi, "Palmas", "SCL")
 
-    assert [call["flyTo"] for call in kiwi.calls] == ["Santiago, Chile", "SCL"]
+    assert [call["flyTo"] for call in kiwi.calls] == ["SCL"]
+    assert payload["status"] == "destination_mismatch"
     assert payload["offers"] == []
     assert payload["resultsCount"] == 0
     assert "RAI" in payload["note"]
-    assert "Chile" in payload["note"]
     assert "Não apresente" in payload["note"]
 
 
-def test_explicit_cape_verde_is_not_rewritten_to_chile(tmp_path):
-    memory = AgentMemory.create(tmp_path / "agent.sqlite")
-    kiwi = FakeKiwi()
-    payload = _search(memory, kiwi, "Santiago Cabo Verde")
-
-    assert kiwi.calls[0]["flyTo"] == "RAI"
-    assert payload["offers"]
-    assert "RAI" in payload["offers"][0]["route"]
-    assert memory.trips.get("wa-1")["destination"] == "RAI"
+def test_search_tool_does_not_write_the_brief():
+    assert "memory" not in inspect.signature(search_tool).parameters
 
 
-def test_bali_search_uses_dps_not_city_name(tmp_path):
-    memory = AgentMemory.create(tmp_path / "agent.sqlite")
-    kiwi = FakeKiwi(always="DPS")
-    payload = _search(memory, kiwi, "Bali")
-
-    assert kiwi.calls[0]["flyTo"] == "DPS"
-    assert payload["destination"] == "DPS"
-    assert payload["offers"]
-    assert "DPS" in payload["offers"][0]["route"]
-    assert memory.trips.get("wa-1")["destination"] == "DPS"
+def test_search_flights_schema_describes_city_or_iata():
+    tool = search_tool(FakeKiwi())
+    props = _schema(tool)["properties"]
+    assert "Palmas" in props["fly_from"]["description"]
+    assert "Cidade, País" in props["fly_from"]["description"]
+    assert "SCL" in props["fly_to"]["description"]
+    assert "São Paulo" in props["fly_to"]["description"]
+    assert set(props["currency"]["enum"]) == {"BRL", "USD", "EUR"}
+    assert "Cidade, País" in tool.description

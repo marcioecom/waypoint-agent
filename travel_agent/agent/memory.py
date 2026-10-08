@@ -206,22 +206,28 @@ class TripBrief:
             return {}
         return data if isinstance(data, dict) else {}
 
-    def update(self, thread_id: str, **fields: Any) -> dict[str, Any]:
+    def update(
+        self,
+        thread_id: str,
+        *,
+        new_request: bool = False,
+        **fields: Any,
+    ) -> dict[str, Any]:
         with self._locked_conn() as conn:
-            row = conn.execute(
-                "SELECT data FROM trip_briefs WHERE thread_id = ?",
-                (thread_id,),
-            ).fetchone()
             current: dict[str, Any] = {}
-            if row:
-                try:
-                    loaded = json.loads(row[0])
-                    if isinstance(loaded, dict):
-                        current = loaded
-                except json.JSONDecodeError:
-                    current = {}
+            if not new_request:
+                row = conn.execute(
+                    "SELECT data FROM trip_briefs WHERE thread_id = ?",
+                    (thread_id,),
+                ).fetchone()
+                if row:
+                    try:
+                        loaded = json.loads(row[0])
+                        if isinstance(loaded, dict):
+                            current = loaded
+                    except json.JSONDecodeError:
+                        current = {}
 
-            cleaned: dict[str, Any] = {}
             for key, value in fields.items():
                 if key not in _TRIP_KEYS or value is None:
                     continue
@@ -229,26 +235,7 @@ class TripBrief:
                     value = value.strip()
                     if not value:
                         continue
-                cleaned[key] = value
-
-            # Pedido novo (outra origem/destino) não herda datas/notas antigas.
-            route_changed = False
-            for key in ("origin", "destination"):
-                if key in cleaned and current.get(key) not in (None, "", cleaned[key]):
-                    route_changed = True
-                    break
-            if route_changed:
-                for key in (
-                    "date_from",
-                    "date_to",
-                    "return_from",
-                    "return_to",
-                    "notes",
-                ):
-                    if key not in cleaned:
-                        current.pop(key, None)
-
-            current.update(cleaned)
+                current[key] = value
             if "status" not in current:
                 current["status"] = "collecting"
             payload = json.dumps(current, ensure_ascii=False)

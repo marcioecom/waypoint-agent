@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from travel_agent.agent import SYSTEM_PROMPT, build_system_prompt
+from travel_agent.agent.prompt import upcoming_months
 from travel_agent.agent.memory import (
     AgentMemory,
     Preferences,
@@ -58,29 +59,47 @@ def test_trip_brief_roundtrip_and_prompt(tmp_path):
     assert trips.prompt_block("other").startswith("Nenhum pedido ativo")
 
 
-def test_trip_brief_clears_stale_dates_when_route_changes(tmp_path):
+def test_trip_brief_new_request_replaces_previous_trip(tmp_path):
     trips = TripBrief(tmp_path / "agent.sqlite")
     trips.update(
         "chat-1",
-        origin="São Paulo",
-        destination="DPS",
-        date_from="01/01/2028",
-        date_to="31/01/2028",
-        notes="sem resultados; ampliar Nov–Mar",
+        origin="Palmas",
+        destination="SCL",
+        date_from="01/08/2027",
+        date_to="31/08/2027",
+        notes="quer estar lá em 16/08",
         status="searched",
     )
     trips.update(
         "chat-1",
+        new_request=True,
         origin="Palmas",
-        destination="DPS",
+        destination="São Paulo",
         status="collecting",
     )
     saved = trips.get("chat-1")
     assert saved["origin"] == "Palmas"
-    assert saved["destination"] == "DPS"
+    assert saved["destination"] == "São Paulo"
+    assert saved["status"] == "collecting"
     assert "date_from" not in saved
     assert "date_to" not in saved
     assert "notes" not in saved
+
+
+def test_trip_brief_merge_keeps_dates_without_new_request(tmp_path):
+    trips = TripBrief(tmp_path / "agent.sqlite")
+    trips.update(
+        "chat-1",
+        origin="Palmas",
+        destination="SCL",
+        date_from="01/08/2027",
+        notes="quer estar lá em 16/08",
+    )
+    trips.update("chat-1", destination="SCL", status="ready")
+    saved = trips.get("chat-1")
+    assert saved["date_from"] == "01/08/2027"
+    assert saved["notes"] == "quer estar lá em 16/08"
+    assert saved["status"] == "ready"
 
 
 def test_system_prompt_includes_today_trip_and_preferences(tmp_path):
@@ -102,11 +121,19 @@ def test_system_prompt_includes_today_trip_and_preferences(tmp_path):
     assert "update_trip_brief" in SYSTEM_PROMPT
     assert "save_user_preferences" in SYSTEM_PROMPT
     assert "Olá! Como posso ajudar?" in SYSTEM_PROMPT
-    assert "Santiago, Chile" in SYSTEM_PROMPT
-    assert "rotule um destino diferente" in SYSTEM_PROMPT
-    assert "*negrito*" in SYSTEM_PROMPT
-    assert "novembro deste ano" in SYSTEM_PROMPT
-    assert "Bali → DPS" in SYSTEM_PROMPT
+    assert "Cidade, País" in SYSTEM_PROMPT
+    assert "levam país" not in SYSTEM_PROMPT
+    assert "new_request" in SYSTEM_PROMPT
+    assert "Nunca assuma São Paulo" in SYSTEM_PROMPT
+    assert "fly_from=" in SYSTEM_PROMPT
+    assert '*negrito*' in SYSTEM_PROMPT
+    assert "nov/2026" in prompt
+    assert "dez/2026" in prompt
+    assert "jan/2027" in prompt
+    assert "Próximos meses" in prompt
+    assert upcoming_months(
+        datetime(2026, 10, 8, tzinfo=ZoneInfo("America/Sao_Paulo"))
+    ).startswith("out/2026, nov/2026")
 
 
 def test_save_user_preferences_tool_uses_thread_context(tmp_path):
@@ -142,16 +169,44 @@ def test_update_trip_brief_tool_uses_thread_context(tmp_path):
     assert memory.trips.get("wa-2")["destination"] == "São Paulo"
 
 
-def test_update_trip_brief_keeps_santiago_disambiguated(tmp_path):
+def test_update_trip_brief_new_request_clears_old_dates(tmp_path):
     memory = AgentMemory.create(tmp_path / "agent.sqlite")
     tool = trip_tool(memory)
-    token = current_thread_id.set("wa-scl")
+    token = current_thread_id.set("wa-new")
     try:
-        result = tool.invoke({"destination": "Santiago", "status": "collecting"})
+        tool.invoke(
+            {
+                "origin": "Palmas",
+                "destination": "SCL",
+                "date_from": "01/08/2027",
+                "date_to": "31/08/2027",
+                "notes": "buscas anteriores não retornaram",
+                "status": "searched",
+            }
+        )
+        result = tool.invoke(
+            {
+                "new_request": True,
+                "origin": "Palmas",
+                "destination": "São Paulo",
+            }
+        )
     finally:
         current_thread_id.reset(token)
-    assert "Santiago, Chile" in result
-    assert memory.trips.get("wa-scl")["destination"] == "Santiago, Chile"
+    saved = memory.trips.get("wa-new")
+    assert "São Paulo" in result
+    assert saved["destination"] == "São Paulo"
+    assert "date_from" not in saved
+    assert "notes" not in saved
+
+
+def test_update_trip_brief_schema_describes_new_request_and_notes(tmp_path):
+    tool = trip_tool(AgentMemory.create(tmp_path / "agent.sqlite"))
+    props = tool.get_input_schema().model_json_schema()["properties"]
+    assert "new_request" in props
+    assert "zera" in props["new_request"]["description"].casefold()
+    assert "resultados de busca" in props["notes"]["description"].casefold()
+    assert "Palmas" in props["origin"]["description"]
 
 
 def test_open_memory_uses_sqlite_checkpointer(tmp_path):

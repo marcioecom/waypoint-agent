@@ -2,20 +2,27 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Literal
+from typing import Annotated, Literal
 
 from langchain.tools import BaseTool, tool
+from pydantic import Field
 
 from travel_agent.agent.flights import compress_search_payload, mcp_search_args
-from travel_agent.agent.memory import AgentMemory, current_thread_id
 from travel_agent.agent.places import (
     arrival_airports,
     expected_arrival_iata,
     offers_for_destination,
-    resolve_place,
 )
 
 logger = logging.getLogger(__name__)
+
+_EMPTY_HINT = (
+    "A Kiwi não retornou itinerários. Confira se origem/destino estão como "
+    "cidade simples ou IATA (ex.: Palmas, PMW, SCL) — nunca “Cidade, País” — "
+    "e se a data está na lista de Próximos meses (~12 meses). "
+    "Não repita os mesmos argumentos; no máximo 1 tentativa diferente, "
+    "senão responda ao usuário."
+)
 
 
 def find_kiwi_search(tools: list[BaseTool]) -> BaseTool:
@@ -26,20 +33,61 @@ def find_kiwi_search(tools: list[BaseTool]) -> BaseTool:
     raise RuntimeError(f"Tool Kiwi search-flight não encontrada. Disponíveis: {names}")
 
 
-def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
+def search_tool(kiwi_search: BaseTool):
     @tool
     async def search_flights(
-        fly_from: str,
-        fly_to: str,
-        departure_date: str,
-        departure_date_to: str | None = None,
-        return_date: str | None = None,
-        return_date_to: str | None = None,
-        nights_in_dst_from: int | None = None,
-        nights_in_dst_to: int | None = None,
+        fly_from: Annotated[
+            str,
+            Field(
+                description=(
+                    'Origem: IATA ("PMW") ou cidade simples ("Palmas"). '
+                    'Nunca "Cidade, País", nunca vírgula, nunca parênteses.'
+                )
+            ),
+        ],
+        fly_to: Annotated[
+            str,
+            Field(
+                description=(
+                    'Destino: IATA ("SCL", "DPS") ou cidade simples ("São Paulo"). '
+                    "Homônimo → IATA (Santiago do Chile = SCL, Bali = DPS). "
+                    'Nunca "Cidade, País".'
+                )
+            ),
+        ],
+        departure_date: Annotated[
+            str,
+            Field(description="Início da janela de ida, dd/mm/yyyy (ex.: 01/11/2026)."),
+        ],
+        departure_date_to: Annotated[
+            str | None,
+            Field(
+                default=None,
+                description="Fim da janela de ida, dd/mm/yyyy. No mês inteiro, o último dia.",
+            ),
+        ] = None,
+        return_date: Annotated[
+            str | None,
+            Field(
+                default=None,
+                description="Volta explícita, dd/mm/yyyy. Não use junto com nights_in_dst_*.",
+            ),
+        ] = None,
+        return_date_to: Annotated[
+            str | None,
+            Field(default=None, description="Fim da janela de volta, dd/mm/yyyy."),
+        ] = None,
+        nights_in_dst_from: Annotated[
+            int | None,
+            Field(default=None, description="Mínimo de noites no destino (ex.: 7)."),
+        ] = None,
+        nights_in_dst_to: Annotated[
+            int | None,
+            Field(default=None, description="Máximo de noites no destino (ex.: 7)."),
+        ] = None,
         adults: int = 1,
         cabin_class: Literal["M", "W", "C", "F"] = "M",
-        currency: str = "BRL",
+        currency: Literal["BRL", "USD", "EUR"] = "BRL",
         sort: Literal["price", "duration", "quality", "date"] = "price",
     ) -> str:
         """Busca voos na Kiwi. Datas em dd/mm/yyyy.
@@ -49,35 +97,9 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
           departure_date/departure_date_to cobrindo o mês + nights_in_dst_from/to=N.
           Não peça semana específica e NÃO use return_date nesses casos.
         - Ida e volta com datas de volta explícitas: return_date / return_date_to.
-        - Passe cidade com país (ou IATA se já souber): “Santiago, Chile”.
-          Não invente IATA e não peça IATA ao usuário.
+        - Origem/destino: IATA (SCL) ou cidade simples (São Paulo). Nunca “Cidade, País”.
+          Se o usuário der um código (PMW), use exatamente esse código.
         """
-        fly_from = resolve_place(fly_from)
-        fly_to = resolve_place(fly_to)
-        thread_id = current_thread_id.get()
-        if thread_id:
-            try:
-                memory.trips.update(
-                    thread_id,
-                    origin=fly_from,
-                    destination=fly_to,
-                    trip_type=(
-                        "round_trip"
-                        if return_date or nights_in_dst_from is not None
-                        else "one_way"
-                    ),
-                    date_from=departure_date,
-                    date_to=departure_date_to or departure_date,
-                    return_from=return_date,
-                    return_to=return_date_to or return_date,
-                    adults=adults,
-                    currency=currency,
-                    status="searched",
-                )
-            except Exception:
-                # Não abortar a busca (evita checkpoint com tool_call pendente).
-                logger.exception("trip brief update failed for %s", thread_id)
-
         args = mcp_search_args(
             fly_from=fly_from,
             fly_to=fly_to,
@@ -93,21 +115,12 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
             sort=sort,
         )
         compressed = await _run_search(kiwi_search, args)
-        expected = expected_arrival_iata(fly_to)
         offers = list(compressed.get("offers") or [])
+        expected = expected_arrival_iata(fly_to)
         matched = offers_for_destination(offers, fly_to)
 
-        if expected and not matched:
-            iata = next(iter(expected))
-            if iata.upper() != fly_to.strip().upper():
-                retry_args = dict(args)
-                retry_args["flyTo"] = iata
-                compressed = await _run_search(kiwi_search, retry_args)
-                offers = list(compressed.get("offers") or [])
-                matched = offers_for_destination(offers, iata)
-
-        if expected and not matched:
-            got = ", ".join(arrival_airports(offers)) or "destino inesperado"
+        if expected and offers and not matched:
+            got = ", ".join(arrival_airports(offers)) or "outro aeroporto"
             wanted = ", ".join(sorted(expected))
             logger.warning(
                 "flight destination mismatch: wanted %s (%s), got %s",
@@ -117,14 +130,14 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
             )
             return json.dumps(
                 {
+                    "status": "destination_mismatch",
                     "query": compressed.get("query"),
                     "destination": fly_to,
                     "resultsCount": 0,
                     "offers": [],
                     "arrivalAirports": arrival_airports(offers),
                     "note": (
-                        f"A busca não chegou em {fly_to} ({wanted}); "
-                        f"os voos foram para {got}. "
+                        f"A busca retornou voos chegando em {got}, não em {fly_to}. "
                         "Não apresente essas rotas como se fossem o destino pedido. "
                         "Avise com honestidade."
                     ),
@@ -132,10 +145,17 @@ def search_tool(memory: AgentMemory, kiwi_search: BaseTool):
                 ensure_ascii=False,
             )
 
-        compressed["offers"] = matched or offers
-        compressed["destination"] = fly_to
-        compressed["arrivalAirports"] = arrival_airports(compressed["offers"])
-        return json.dumps(compressed, ensure_ascii=False)
+        result = dict(compressed)
+        result["offers"] = matched
+        result["destination"] = fly_to
+        result["arrivalAirports"] = arrival_airports(result["offers"])
+        if result["offers"]:
+            result["status"] = "ok"
+        else:
+            result["status"] = "empty"
+            result["resultsCount"] = 0
+            result["hint"] = _EMPTY_HINT
+        return json.dumps(result, ensure_ascii=False)
 
     return search_flights
 

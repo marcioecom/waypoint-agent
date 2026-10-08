@@ -1,151 +1,27 @@
-"""Desambigua origem/destino antes da Kiwi.
+"""Checa se as ofertas chegaram no IATA pedido.
 
-Cidades com homônimos perigosos (Santiago, Córdoba…) ganham o default
-óbvio para quem viaja do Brasil, a menos que o usuário já tenha dado
-país ou IATA. Destinos em que o nome de cidade zera a Kiwi (Bali) vão
-direto para o IATA. Também serve para checar se as ofertas chegaram no
-lugar pedido.
+Não reescreve cidade nem país. Homônimos (Santiago, Bali) o modelo
+desambigua pelo IATA na tool. Só filtramos quando o destino já é um
+código de 3 letras.
 """
 
 from __future__ import annotations
 
 import re
-import unicodedata
-from dataclasses import dataclass
 
 _IATA_RE = re.compile(r"\b[A-Z]{3}\b")
-
-
-def fold(text: str) -> str:
-    stripped = unicodedata.normalize("NFD", text.casefold())
-    return "".join(char for char in stripped if unicodedata.category(char) != "Mn")
 
 
 def _is_iata(text: str) -> bool:
     return len(text) == 3 and text.isascii() and text.isalpha()
 
 
-def _has_name(folded: str, name: str) -> bool:
-    return re.search(rf"\b{re.escape(name)}\b", folded) is not None
-
-
-@dataclass(frozen=True)
-class Place:
-    names: tuple[str, ...]
-    default: str
-    default_iata: frozenset[str]
-    variants: tuple[tuple[tuple[str, ...], str, frozenset[str]], ...] = ()
-    exclude: tuple[str, ...] = ()
-
-    def matches(self, folded: str) -> bool:
-        if any(token in folded for token in self.exclude):
-            return False
-        return any(_has_name(folded, name) for name in self.names)
-
-    def resolve(self, folded: str) -> tuple[str, frozenset[str]]:
-        for hints, query, iata in self.variants:
-            if any(hint in folded for hint in hints):
-                return query, iata
-        return self.default, self.default_iata
-
-    def iata_for_code(self, code: str) -> frozenset[str] | None:
-        if code in self.default_iata:
-            return self.default_iata
-        for _hints, _query, iata in self.variants:
-            if code in iata:
-                return iata
-        return None
-
-
-# Homônimos e destinos em que o nome de cidade zera a Kiwi (ex.: Bali).
-PLACES: tuple[Place, ...] = (
-    Place(
-        names=("santiago",),
-        default="Santiago, Chile",
-        default_iata=frozenset({"SCL"}),
-        variants=(
-            (
-                ("cabo verde", "cape verde", "praia", "ilha de santiago", "rai"),
-                "RAI",
-                frozenset({"RAI"}),
-            ),
-            (("chile", "scl"), "Santiago, Chile", frozenset({"SCL"})),
-        ),
-        exclude=("compostela",),
-    ),
-    Place(
-        names=("cordoba",),
-        default="Córdoba, Argentina",
-        default_iata=frozenset({"COR"}),
-        variants=(
-            (
-                ("espanha", "spain", "espana", "odb"),
-                "Córdoba, Espanha",
-                frozenset({"ODB"}),
-            ),
-            (("argentina", "cor"), "Córdoba, Argentina", frozenset({"COR"})),
-        ),
-    ),
-    Place(
-        names=("san jose",),
-        default="San José, Costa Rica",
-        default_iata=frozenset({"SJO"}),
-        variants=(
-            (
-                ("california", "eua", "usa", "estados unidos", "sjc"),
-                "SJC",
-                frozenset({"SJC"}),
-            ),
-            (("costa rica", "sjo"), "San José, Costa Rica", frozenset({"SJO"})),
-        ),
-    ),
-    # "Denpasar, Indonesia" / "Bali" devolvem 0 na Kiwi; DPS encontra itinerários.
-    Place(
-        names=("bali", "denpasar"),
-        default="DPS",
-        default_iata=frozenset({"DPS"}),
-    ),
-)
-
-
-def _match_place(folded: str) -> Place | None:
-    for place in PLACES:
-        if place.matches(folded):
-            return place
-    return None
-
-
-def resolve_place(raw: str) -> str:
-    """Devolve o texto que deve ir para a Kiwi / TripBrief."""
-    text = raw.strip()
-    if not text:
-        return text
-    if _is_iata(text):
-        return text.upper()
-    place = _match_place(fold(text))
-    if place is None:
-        return text
-    query, _iata = place.resolve(fold(text))
-    return query
-
-
 def expected_arrival_iata(raw: str) -> frozenset[str] | None:
-    """Aeroportos aceitáveis na chegada, ou None se não há como checar."""
+    """Aeroportos aceitáveis na chegada, só se o destino já for IATA."""
     text = raw.strip()
-    if not text:
-        return None
     if _is_iata(text):
-        code = text.upper()
-        for place in PLACES:
-            matched = place.iata_for_code(code)
-            if matched:
-                return matched
-        return frozenset({code})
-    place = _match_place(fold(text))
-    if place is None:
-        return None
-    _query, iata = place.resolve(fold(text))
-    return iata
+        return frozenset({text.upper()})
+    return None
 
 
 def arrival_iata(route: str) -> str | None:

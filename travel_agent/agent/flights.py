@@ -166,7 +166,10 @@ def compress_search_payload(payload: Any, *, limit: int = 5) -> dict[str, Any]:
             "Copie price/route/details/booking_url das offers para AgentReply. "
             "Não invente dados."
             if offers
-            else "Sem itinerários. Ajuste a busca e tente de novo sem perguntar menu."
+            else (
+                "Sem itinerários. Confira cidade simples ou IATA e a janela "
+                "de Próximos meses; não repita os mesmos argumentos."
+            )
         ),
     }
 
