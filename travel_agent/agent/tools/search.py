@@ -57,13 +57,21 @@ def search_tool(kiwi_search: BaseTool):
         ],
         departure_date: Annotated[
             str,
-            Field(description="Início da janela de ida, dd/mm/yyyy (ex.: 01/11/2026)."),
+            Field(
+                description=(
+                    "Início da janela de ida, dd/mm/yyyy (ex.: 01/11/2026). "
+                    "Data obrigatória X com N noites: X − N dias (ex.: 14/08 + 7 noites → 07/08)."
+                )
+            ),
         ],
         departure_date_to: Annotated[
             str | None,
             Field(
                 default=None,
-                description="Fim da janela de ida, dd/mm/yyyy. No mês inteiro, o último dia.",
+                description=(
+                    "Fim da janela de ida, dd/mm/yyyy. Mês inteiro sem dia obrigatório: último dia. "
+                    "Data obrigatória X com N noites: X (não o mês inteiro)."
+                ),
             ),
         ] = None,
         return_date: Annotated[
@@ -86,6 +94,26 @@ def search_tool(kiwi_search: BaseTool):
             Field(default=None, description="Máximo de noites no destino (ex.: 7)."),
         ] = None,
         adults: int = 1,
+        hand_bags: Annotated[
+            int | None,
+            Field(
+                default=None,
+                description=(
+                    "Malas de mão por adulto (1 = mala de mão). "
+                    "Só preencha se o usuário falou de bagagem nesta viagem."
+                ),
+            ),
+        ] = None,
+        hold_bags: Annotated[
+            int | None,
+            Field(
+                default=None,
+                description=(
+                    "Malas despachadas por adulto. "
+                    "Só preencha se o usuário pediu bagagem despachada."
+                ),
+            ),
+        ] = None,
         cabin_class: Literal["M", "W", "C", "F"] = "M",
         currency: Literal["BRL", "USD", "EUR"] = "BRL",
         sort: Literal["price", "duration", "quality", "date"] = "price",
@@ -96,9 +124,13 @@ def search_tool(kiwi_search: BaseTool):
         - Mês + estadia de N dias (ex.: “1 semana em janeiro, a mais barata”):
           departure_date/departure_date_to cobrindo o mês + nights_in_dst_from/to=N.
           Não peça semana específica e NÃO use return_date nesses casos.
+        - Data obrigatória no destino (“passando o dia X”) com N noites:
+          departure_date = X − N, departure_date_to = X, nights_in_dst_from/to = N.
+          Ex.: 14/08/2027 + 7 noites → ida 07/08/2027 a 14/08/2027. Não use o mês inteiro.
         - Ida e volta com datas de volta explícitas: return_date / return_date_to.
         - Origem/destino: IATA (SCL) ou cidade simples (São Paulo). Nunca “Cidade, País”.
           Se o usuário der um código (PMW), use exatamente esse código.
+        - Bagagem desta viagem: hand_bags / hold_bags. Não grave isso em prefs.
         """
         args = mcp_search_args(
             fly_from=fly_from,
@@ -113,6 +145,8 @@ def search_tool(kiwi_search: BaseTool):
             cabin_class=cabin_class,
             currency=currency,
             sort=sort,
+            hand_bags=hand_bags,
+            hold_bags=hold_bags,
         )
         compressed = await _run_search(kiwi_search, args)
         offers = list(compressed.get("offers") or [])

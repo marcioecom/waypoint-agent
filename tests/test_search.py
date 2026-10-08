@@ -131,3 +131,38 @@ def test_search_flights_schema_describes_city_or_iata():
     assert "São Paulo" in props["fly_to"]["description"]
     assert set(props["currency"]["enum"]) == {"BRL", "USD", "EUR"}
     assert "Cidade, País" in tool.description
+    assert "X − N" in props["departure_date"]["description"]
+    assert "mão" in props["hand_bags"]["description"]
+    assert "14/08/2027" in tool.description
+
+
+def test_search_flights_passes_bags_through():
+    kiwi = FakeKiwi(always="SCL")
+    tool = search_tool(kiwi)
+    raw = asyncio.run(
+        tool.ainvoke(
+            {
+                "fly_from": "Palmas",
+                "fly_to": "SCL",
+                "departure_date": "07/08/2027",
+                "departure_date_to": "14/08/2027",
+                "nights_in_dst_from": 7,
+                "nights_in_dst_to": 7,
+                "adults": 2,
+                "hand_bags": 1,
+                "hold_bags": 0,
+            }
+        )
+    )
+    payload = json.loads(raw)
+    assert kiwi.calls[0]["adults_hand_bags"] == 1
+    assert kiwi.calls[0]["adults_hold_bags"] == 0
+    assert kiwi.calls[0]["adults"] == 2
+    assert payload["status"] == "ok"
+
+
+def test_search_flights_omits_bags_by_default():
+    kiwi = FakeKiwi(always="SCL")
+    _search(kiwi, "Palmas", "SCL")
+    assert kiwi.calls[0]["adults_hand_bags"] is None
+    assert kiwi.calls[0]["adults_hold_bags"] is None
