@@ -7,6 +7,21 @@ from pydantic import Field
 
 from travel_agent.agent.memory import AgentMemory, current_thread_id
 
+NOTHING_CHANGED = (
+    "Nenhum campo informado; nada foi salvo e nada mudou. "
+    "Não chame esta ferramenta de novo neste turno. Responda ao usuário com AgentReply."
+)
+
+
+def _has_field(*values: object) -> bool:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return True
+    return False
+
 
 def preference_tool(memory: AgentMemory):
     @tool
@@ -25,7 +40,11 @@ def preference_tool(memory: AgentMemory):
         adults: int | None = None,
         notes: str | None = None,
     ) -> str:
-        """Salva preferências estáveis (origem habitual, classe, moeda, adultos)."""
+        """Salva uma preferência estável que o usuário ACABOU de informar (origem habitual,
+        classe, moeda, adultos). Preencha pelo menos um campo. Não use para cumprimento
+        nem para “verificar” preferências: elas já estão no CONTEXTO."""
+        if not _has_field(home_city, cabin, currency, adults, notes):
+            return NOTHING_CHANGED
         thread_id = current_thread_id.get()
         if not thread_id:
             return "Não consegui associar as preferências a este chat."
@@ -38,7 +57,7 @@ def preference_tool(memory: AgentMemory):
             notes=notes,
         )
         if not saved:
-            return "Nada para salvar."
+            return NOTHING_CHANGED
         summary = ", ".join(f"{key}={value}" for key, value in saved.items())
         return f"Preferências salvas: {summary}"
 
