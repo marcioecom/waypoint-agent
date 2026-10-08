@@ -60,6 +60,8 @@ def test_compress_search_payload_limits_offers():
     assert compressed["resultsCount"] == 10
     assert len(compressed["offers"]) == 5
     assert "Copie price/route" in compressed["note"]
+    assert "atende" in compressed["note"]
+    assert "route" in compressed["note"]
 
 
 def test_compress_unwraps_mcp_content_blocks():
@@ -136,6 +138,25 @@ def test_mcp_search_args_fills_strict_schema():
     assert args["departureDateTo"] == "31/01/2027"
     assert args["children"] == 0
     assert args["select_airlines"] is None
+    assert args["adults_hand_bags"] is None
+    assert args["adults_hold_bags"] is None
+
+
+def test_mcp_search_args_passes_bags():
+    args = mcp_search_args(
+        fly_from="Palmas",
+        fly_to="SCL",
+        departure_date="07/08/2027",
+        departure_date_to="14/08/2027",
+        nights_in_dst_from=7,
+        nights_in_dst_to=7,
+        adults=2,
+        hand_bags=1,
+        hold_bags=0,
+    )
+    assert args["adults_hand_bags"] == 1
+    assert args["adults_hold_bags"] == 0
+    assert args["adults"] == 2
 
 
 def test_mcp_search_args_nights_clears_return_dates():

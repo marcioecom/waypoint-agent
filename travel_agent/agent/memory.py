@@ -263,7 +263,9 @@ class TripBrief:
         lines = [
             f"- {label}: {brief[key]}"
             for key, label in _TRIP_LABELS.items()
-            if key in brief and brief[key] not in (None, "")
+            if key != "status"
+            and key in brief
+            and brief[key] not in (None, "")
         ]
         if not lines:
             return "Nenhum pedido ativo ainda."

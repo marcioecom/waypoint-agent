@@ -164,7 +164,8 @@ def compress_search_payload(payload: Any, *, limit: int = 5) -> dict[str, Any]:
         "offers": offers,
         "note": (
             "Copie price/route/details/booking_url das offers para AgentReply. "
-            "Não invente dados."
+            "Não invente dados. Antes de dizer que uma oferta atende uma data "
+            "obrigatória, confira ida e volta na route."
             if offers
             else (
                 "Sem itinerários. Confira cidade simples ou IATA e a janela "
@@ -188,6 +189,8 @@ def mcp_search_args(
     cabin_class: str = "M",
     currency: str = "BRL",
     sort: str = "price",
+    hand_bags: int | None = None,
+    hold_bags: int | None = None,
 ) -> dict[str, Any]:
     """Preenche o schema estrito do MCP Kiwi com defaults seguros."""
     # Estadia fixa (ex.: 7 noites) é o padrão certo para "ida + N dias".
@@ -234,8 +237,8 @@ def mcp_search_args(
         "ret_atime_to": None,
         "stopover_from": None,
         "stopover_to": None,
-        "adults_hold_bags": None,
-        "adults_hand_bags": None,
+        "adults_hold_bags": hold_bags,
+        "adults_hand_bags": hand_bags,
         "children_hold_bags": None,
         "children_hand_bags": None,
         "allow_self_transfer": True,

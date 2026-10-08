@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from langchain.tools import tool
 from pydantic import Field
@@ -12,15 +12,32 @@ NOTHING_CHANGED = (
     "Não chame esta ferramenta de novo neste turno. Responda ao usuário com AgentReply."
 )
 
+_NEXT_STEP = (
+    "Se origem, destino e datas estão no pedido, chame search_flights; senão AgentReply."
+)
 
-def _has_field(*values: object) -> bool:
-    for value in values:
+
+def _filled(**fields: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in fields.items():
         if value is None:
             continue
-        if isinstance(value, str) and not value.strip():
-            continue
-        return True
-    return False
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                continue
+        out[key] = value
+    return out
+
+
+def _already_matches(current: dict[str, Any], incoming: dict[str, Any]) -> bool:
+    if not incoming or not current:
+        return False
+    return all(current.get(key) == value for key, value in incoming.items())
+
+
+def _brief_summary(brief: dict[str, Any]) -> str:
+    return ", ".join(f"{key}={value}" for key, value in brief.items() if key != "status")
 
 
 def trip_tool(memory: AgentMemory):
@@ -60,15 +77,20 @@ def trip_tool(memory: AgentMemory):
             Field(default=None, description="Fim da janela de volta, dd/mm/yyyy."),
         ] = None,
         cabin: str | None = None,
-        adults: int | None = None,
+        adults: Annotated[
+            int | None,
+            Field(
+                default=None,
+                description="Adultos desta viagem. Não grave isso em save_user_preferences.",
+            ),
+        ] = None,
         currency: Literal["BRL", "USD", "EUR"] | None = None,
-        status: Literal["collecting", "ready", "searched"] | None = None,
         notes: Annotated[
             str | None,
             Field(
                 default=None,
                 description=(
-                    "Só preferências do usuário (ex.: “quer estar lá em 16/08”). "
+                    "Só preferências do usuário (ex.: “quer estar lá em 14/08/2027, 7 noites”). "
                     "Nunca resultados de busca nem sugestões."
                 ),
             ),
@@ -85,28 +107,38 @@ def trip_tool(memory: AgentMemory):
             ),
         ] = False,
     ) -> str:
-        """Atualiza o pedido ativo (origem, destino, datas, ida/volta, status).
+        """Atualiza o pedido ativo (origem, destino, datas, ida/volta, adultos).
 
-        Pedido novo: new_request=true e só os campos que o usuário disse agora.
+        Uma vez por turno, com todos os campos novos juntos. Pedido novo: new_request=true
+        e só o que o usuário disse agora. Se o PEDIDO ATIVO já reflete esta mensagem,
+        não chame de novo — search_flights ou AgentReply.
         """
-        if not new_request and not _has_field(
-            origin,
-            destination,
-            trip_type,
-            date_from,
-            date_to,
-            return_from,
-            return_to,
-            cabin,
-            adults,
-            currency,
-            status,
-            notes,
-        ):
+        incoming = _filled(
+            origin=origin,
+            destination=destination,
+            trip_type=trip_type,
+            date_from=date_from,
+            date_to=date_to,
+            return_from=return_from,
+            return_to=return_to,
+            cabin=cabin,
+            adults=adults,
+            currency=currency,
+            notes=notes,
+        )
+        if not new_request and not incoming:
             return NOTHING_CHANGED
         thread_id = current_thread_id.get()
         if not thread_id:
             return "Não consegui associar o pedido a este chat."
+        current = memory.trips.get(thread_id)
+        if not new_request and _already_matches(current, incoming):
+            summary = _brief_summary(current) or "sem campos novos"
+            return (
+                f"Nada mudou no pedido ativo: {summary}. "
+                "Não chame esta ferramenta de novo neste turno. "
+                f"{_NEXT_STEP}"
+            )
         saved = memory.trips.update(
             thread_id,
             new_request=new_request,
@@ -120,12 +152,15 @@ def trip_tool(memory: AgentMemory):
             cabin=cabin,
             adults=adults,
             currency=currency,
-            status=status,
             notes=notes,
         )
         if not saved:
             return NOTHING_CHANGED
-        summary = ", ".join(f"{key}={value}" for key, value in saved.items())
-        return f"Pedido ativo atualizado: {summary}"
+        summary = _brief_summary(saved)
+        return (
+            f"Pedido ativo atualizado: {summary}. "
+            "Já está salvo; não chame update_trip_brief de novo neste turno. "
+            f"Se não há mais campo novo nesta mensagem: {_NEXT_STEP}"
+        )
 
     return update_trip_brief
