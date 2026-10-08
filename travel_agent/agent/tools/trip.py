@@ -7,6 +7,21 @@ from pydantic import Field
 
 from travel_agent.agent.memory import AgentMemory, current_thread_id
 
+NOTHING_CHANGED = (
+    "Nenhum campo informado; nada foi salvo e nada mudou. "
+    "Não chame esta ferramenta de novo neste turno. Responda ao usuário com AgentReply."
+)
+
+
+def _has_field(*values: object) -> bool:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return True
+    return False
+
 
 def trip_tool(memory: AgentMemory):
     @tool
@@ -74,6 +89,21 @@ def trip_tool(memory: AgentMemory):
 
         Pedido novo: new_request=true e só os campos que o usuário disse agora.
         """
+        if not new_request and not _has_field(
+            origin,
+            destination,
+            trip_type,
+            date_from,
+            date_to,
+            return_from,
+            return_to,
+            cabin,
+            adults,
+            currency,
+            status,
+            notes,
+        ):
+            return NOTHING_CHANGED
         thread_id = current_thread_id.get()
         if not thread_id:
             return "Não consegui associar o pedido a este chat."
@@ -94,7 +124,7 @@ def trip_tool(memory: AgentMemory):
             notes=notes,
         )
         if not saved:
-            return "Nada para atualizar no pedido."
+            return NOTHING_CHANGED
         summary = ", ".join(f"{key}={value}" for key, value in saved.items())
         return f"Pedido ativo atualizado: {summary}"
 

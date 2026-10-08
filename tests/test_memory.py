@@ -121,6 +121,10 @@ def test_system_prompt_includes_today_trip_and_preferences(tmp_path):
     assert "update_trip_brief" in SYSTEM_PROMPT
     assert "save_user_preferences" in SYSTEM_PROMPT
     assert "Olá! Como posso ajudar?" in SYSTEM_PROMPT
+    assert "Cumprimentar de volta é ok" in SYSTEM_PROMPT
+    assert "Todo turno termina com AgentReply" in SYSTEM_PROMPT
+    assert "bom dia" in SYSTEM_PROMPT
+    assert "Nenhuma preferência salva” não é motivo" in SYSTEM_PROMPT
     assert "Cidade, País" in SYSTEM_PROMPT
     assert "levam país" not in SYSTEM_PROMPT
     assert "new_request" in SYSTEM_PROMPT
@@ -147,6 +151,8 @@ def test_save_user_preferences_tool_uses_thread_context(tmp_path):
     assert "Recife" in result
     assert memory.prefs.get("wa-1")["home_city"] == "Recife"
     assert "runtime" not in tool.args
+    assert "pelo menos um campo" in tool.description
+    assert "cumprimento" in tool.description.casefold()
 
 
 def test_update_trip_brief_tool_uses_thread_context(tmp_path):
@@ -167,6 +173,43 @@ def test_update_trip_brief_tool_uses_thread_context(tmp_path):
         current_thread_id.reset(token)
     assert "Palmas" in result
     assert memory.trips.get("wa-2")["destination"] == "São Paulo"
+
+
+def test_empty_save_user_preferences_points_to_agent_reply(tmp_path):
+    memory = AgentMemory.create(tmp_path / "agent.sqlite")
+    tool = preference_tool(memory)
+    token = current_thread_id.set("wa-empty")
+    try:
+        result = tool.invoke(
+            {
+                "home_city": None,
+                "cabin": None,
+                "currency": None,
+                "adults": None,
+                "notes": None,
+            }
+        )
+    finally:
+        current_thread_id.reset(token)
+    assert "Nada para salvar" not in result
+    assert "nada mudou" in result.casefold()
+    assert "Não chame esta ferramenta de novo neste turno" in result
+    assert "AgentReply" in result
+    assert memory.prefs.get("wa-empty") == {}
+
+
+def test_empty_update_trip_brief_points_to_agent_reply(tmp_path):
+    memory = AgentMemory.create(tmp_path / "agent.sqlite")
+    tool = trip_tool(memory)
+    token = current_thread_id.set("wa-empty-trip")
+    try:
+        result = tool.invoke({})
+    finally:
+        current_thread_id.reset(token)
+    assert "nada mudou" in result.casefold()
+    assert "Não chame esta ferramenta de novo neste turno" in result
+    assert "AgentReply" in result
+    assert memory.trips.get("wa-empty-trip") == {}
 
 
 def test_update_trip_brief_new_request_clears_old_dates(tmp_path):
