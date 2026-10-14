@@ -33,7 +33,7 @@ async def build_agent(memory: AgentMemory):
     kiwi_search = find_kiwi_search(mcp_tools)
 
     tools = [
-        search_tool(memory, kiwi_search),
+        search_tool(kiwi_search),
         trip_tool(memory),
         preference_tool(memory),
     ]

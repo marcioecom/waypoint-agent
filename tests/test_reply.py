@@ -61,6 +61,12 @@ def test_text_from_response_prefers_structured_offers():
     assert "offer-id-99" not in text
 
 
+def test_agent_reply_description_says_it_ends_the_turn():
+    assert AgentReply.__doc__ is not None
+    assert "ENCERRA o turno" in AgentReply.__doc__
+    assert "cumprimento" in AgentReply.__doc__.casefold()
+
+
 def test_structured_schema_has_offer_payload_not_ids():
     properties = AgentReply.model_json_schema()["properties"]
     assert "offer_ids" not in properties

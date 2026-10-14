@@ -11,6 +11,9 @@ from travel_agent.services.gateway import send_message
 logger = logging.getLogger(__name__)
 
 FALLBACK = "Não consegui processar sua mensagem agora. Tenta de novo daqui a pouco."
+# Teto do grafo (~19 voltas modelo↔tools). Um turno normal cabe em 2–8 steps.
+RECURSION_LIMIT = 40
+INVOKE_TIMEOUT_S = 90.0
 
 _pending: set[asyncio.Task] = set()
 _locks: dict[str, asyncio.Lock] = {}
@@ -31,12 +34,18 @@ def as_text(content: object) -> str:
 
 
 async def run_agent(agent, thread_id: str, message: str) -> str:
-    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": RECURSION_LIMIT,
+    }
     token = current_thread_id.set(thread_id)
     try:
-        response = await agent.ainvoke(
-            {"messages": [HumanMessage(content=message)]},
-            config,
+        response = await asyncio.wait_for(
+            agent.ainvoke(
+                {"messages": [HumanMessage(content=message)]},
+                config,
+            ),
+            timeout=INVOKE_TIMEOUT_S,
         )
     finally:
         current_thread_id.reset(token)

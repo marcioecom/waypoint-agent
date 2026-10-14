@@ -20,7 +20,8 @@ class FlightOffer(BaseModel):
 
 
 class AgentReply(BaseModel):
-    """Resposta montada pela aplicação para o WhatsApp."""
+    """Responde ao usuário e ENCERRA o turno. Use sempre que for falar com a pessoa:
+    resultado de busca, pergunta, cumprimento ou aviso."""
 
     model_config = ConfigDict(extra="forbid")
 
